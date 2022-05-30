@@ -982,13 +982,14 @@ class RecursiveTransformer(nn.Module):
         """
         single step forward in the recursive structure
         """
-        future_b = video_features[:, 1, :].clone()
-        fut_emb = video_features[:, 3, :].clone()
+        # future_b = video_features[:, 1, :].clone()
+        # fut_emb = video_features[:, 7, :].clone()
+        fut_emb_list = video_features[:, 1:8, :].clone()
         video_features = self.size_adjust(video_features)
         self.future_rec = []
         self.future_gt = []
         if gt_clip is None:
-            gt_clip = video_features[:, 1:4, :].clone().cuda()
+            gt_clip = video_features[:, 1:8, :].clone().cuda()
         # preprocess
         # clip_feats = torch.zeros(video_features[:, 1:4, :].shape).cuda()
         # clip_feats[:, 0:3, :] = video_features[:, 1:4, :].clone()
@@ -996,8 +997,14 @@ class RecursiveTransformer(nn.Module):
         # future_b = torch.zeros(video_features[:, 3, :].shape)
         # future_b = video_features[:, 3, :].clone()
         # print(future_b.shape)
-        future_b = self.mlp(future_b)
-        fut_emb = self.mlp(fut_emb)
+        fut_mlp_list = []
+        for idx in range(7):
+            # print("video", video_features[:, idx+1, :].shape)
+            # print("feat", self.mlp(fut_emb_list[:, idx, :]).shape)
+            video_features[:, idx+1, :] = self.mlp(fut_emb_list[:, idx, :]).clone()
+        fut_emb_list = video_features[:, 1:8, :].clone()
+        future_b = fut_emb_list[0].clone()
+        fut_emb = fut_emb_list[6].clone()
 
         # future_b = self.pred_f(future_b)
         # tmp_feat_f = clip_feats[:, 2, :].clone().cuda()
@@ -1006,11 +1013,11 @@ class RecursiveTransformer(nn.Module):
         # tmp_zeros = torch.zeros(video_features[:, 1, :].shape).cuda() + future_b.reshape(-1, 1, 768)
         # print('tmp_zeros', tmp_zeros.shape)
         # print('video_feature', video_features[:, 1, :].shape)
-        video_features[:, 1, :] = future_b.clone()
+        # video_features[:, 1, :] = future_b.clone()
         # fut_zeros = torch.zeros(video_features[:, 2:4, :].shape).cuda() + fut_emb.reshape(-1, 1, 768)
-        video_features[:, 2, :] = fut_emb.clone()
-        video_features[:, 3, :] = fut_emb.clone()
-        clip_feats = video_features[:, 1:4, :].clone()
+        # video_features[:, 2, :] = fut_emb.clone()
+        # video_features[:, 3, :] = fut_emb.clone()
+        clip_feats = video_features[:, 1:8, :].clone()
 
         # past_feats = gt_clip[:, 0, :].reshape((-1, 1, 384)).clone().cuda()
         # tmp_feats = clip_feats[:, 0, :].reshape((-1, 1, 384)).clone().cuda()
@@ -1085,7 +1092,7 @@ class RecursiveTransformer(nn.Module):
                 # print(type(encoded_layer_outputs[0]))
                 encoded_outputs_list.append(encoded_layer_outputs)
                 prediction_scores_list.append(prediction_scores)
-                action_score.append(prediction_scores[:, 3, :])
+                action_score.append(prediction_scores[:, 7, :])
         else:
             for idx in range(step_size):
                 encoded_layer_outputs, prediction_scores = self.forward_step(
@@ -1096,7 +1103,7 @@ class RecursiveTransformer(nn.Module):
                 )
                 encoded_outputs_list.append(encoded_layer_outputs)
                 prediction_scores_list.append(prediction_scores)
-                action_score.append(prediction_scores[:, 3, :])
+                action_score.append(prediction_scores[:, 7, :])
         # compute loss, get predicted words
         caption_loss = 0.0
         for idx in range(step_size):
@@ -1104,7 +1111,7 @@ class RecursiveTransformer(nn.Module):
                 prediction_scores_list[idx].view(-1, self.cfg.vocab_size),
                 input_labels_list[idx].view(-1),
             )
-            gt_action_list = input_labels_list[idx][:, 3]
+            gt_action_list = input_labels_list[idx][:, 7]
             act_score_list = action_score[idx].cpu()
             action_loss = 0.0
             for actidx in range(len(gt_action_list)):
@@ -1117,17 +1124,8 @@ class RecursiveTransformer(nn.Module):
                 else:
                     action_loss += (1 / 300) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
             cont_loss = 0.0
-            # tmp_pred_score_list = prediction_scores_list[idx].view(-1, self.cfg.vocab_size)
-            # tmp_idx_list = input_labels_list[idx].view(-1)
-            # for i in range(1, len(tmp_pred_score_list)):
-            #     cont_loss += self.contloss_func(tmp_pred_score_list[i].view(-1, self.cfg.vocab_size), tmp_idx_list[i-1].view(-1))
-            # for i in range(0, len(tmp_pred_score_list) - 1):
-            #     cont_loss += self.contloss_func(tmp_pred_score_list[i].view(-1, self.cfg.vocab_size), tmp_idx_list[i+1].view(-1))
 
-            # cont_loss += self.cliploss(future_rec[idx], future_gt[idx])
-            # print("enc", encoded_outputs_list[idx][0].shape)
-
-            cont_loss += self.cliploss(future_rec[idx], encoded_outputs_list[idx][0][:, 5:, :])
+            cont_loss += self.cliploss(future_rec[idx], encoded_outputs_list[idx][0][:, 9:, :])
             if gt_clip is not None:
                 # print("rec", future_rec[idx].shape)
                 # print("gt", future_gt[idx].shape)
@@ -1156,7 +1154,7 @@ class RecursiveTransformer(nn.Module):
 
             # caption_loss += 0.9 * snt_loss
             # caption_loss += fut_loss
-            caption_loss += 0.9 * snt_loss + 2000 * fut_loss + 1 * cont_loss + action_loss / 100
+            caption_loss += 0.9 * snt_loss + 1000 * fut_loss + 1 * cont_loss + action_loss / 100
             # caption_loss += 0.9 * snt_loss + 0.1 * fut_loss + (1 / cont_loss)
         caption_loss /= step_size
         return caption_loss, prediction_scores_list

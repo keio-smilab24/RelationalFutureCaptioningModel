@@ -92,6 +92,29 @@ def save_frames(video_path: str, frame_dir: str,
         else:
             break
 
+
+def save_frame_sec(video_path, sec, result_path):
+    cap = cv2.VideoCapture(video_path)
+
+    if not cap.isOpened():
+        return
+
+    os.makedirs(os.path.dirname(result_path), exist_ok=True)
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, round(fps * sec))
+
+    ret, frame = cap.read()
+
+    if ret:
+        frame = cv2.resize(frame, dsize=(500, 500))
+        frame = cv2pil(frame)
+        frame = crop_center(frame, 224, 224)
+        frame = pil2cv(frame)
+        cv2.imwrite(result_path, frame)
+
+
 if __name__ == "__main__":
     frame_dir = "./ponnet_data/4s_16_center_future_frames/"
     clip_file = "./ponnet_data/1000samples.csv"
@@ -100,7 +123,20 @@ if __name__ == "__main__":
         reader = csv.reader(f, delimiter=",")
         # reader = csv.reader(f)
         i = 0
-        for row in tqdm(reader):
-            file_name = '_' + row[0] + '.mp4'
-            # dir_name = frame_dir + file_name.replace(".mov", "")
-            save_frames("./ponnet_data/samples/" + file_name, frame_dir, file_name=row[0])
+        # for row in tqdm(reader):
+        #     file_name = '_' + row[0] + '.mp4'
+        #     # dir_name = frame_dir + file_name.replace(".mov", "")
+        #     save_frames("./ponnet_data/samples/" + file_name, frame_dir, file_name=row[0])
+
+    for sec in tqdm(range(5)):
+        if sec == 0:
+            continue
+        with open(clip_file, 'r') as f:
+            reader = csv.reader(f, delimiter=",")
+            for row in tqdm(reader):
+                file_name = '_' + row[0] + '.mp4'
+                # dir_name = frame_dir + file_name.replace(".mov", "")
+                # out_dir = "./ponnet_data/" + str(3 + sec * 0.2) + "s_16_center_future_frames"
+                out_file = "./ponnet_data/" + str(3 + sec * 0.2) + "s_16_center_future_frames/" + row[0] + ".png"
+                # os.makedirs(out_dir, exist_ok=True)
+                save_frame_sec("./ponnet_data/samples/" + file_name, 3 + sec * 0.2, out_file)

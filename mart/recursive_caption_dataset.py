@@ -224,17 +224,38 @@ class RecursiveCaptionDataset(data.Dataset):
         file_n = os.path.join(".", "ponnet_data", "center_future_frames", feat_file)
         all_feat_n = os.path.join(".", "ponnet_data", "16_center_future_frames", all_feat_file)
         fut_img = os.path.join(".", "ponnet_data", "4s_16_center_future_frames", feat_file)
+        fut_img_2 = os.path.join(".", "ponnet_data", "3.2s_16_center_future_frames", feat_file)
+        fut_img_4 = os.path.join(".", "ponnet_data", "3.4s_16_center_future_frames", feat_file)
+        fut_img_6 = os.path.join(".", "ponnet_data", "3.6s_16_center_future_frames", feat_file)
+        fut_img_8 = os.path.join(".", "ponnet_data", "3.8s_16_center_future_frames", feat_file)
 
         emb_feat = cv2.imread(file_n)
         emb_feat = torch.from_numpy(emb_feat.astype(np.float32)).clone()
         emb_feat = emb_feat.reshape(-1, 150528)
         # emb_feat = emb_feat.to('cpu').detach().numpy().copy()
         all_emb_feat = cv2.imread(all_feat_n)
+        fut_list = []
+        fut_emb_feat_2 = cv2.imread(fut_img_2)
+        fut_emb_feat_2 = torch.from_numpy(fut_emb_feat_2.astype(np.float32)).clone()
+        fut_emb_feat_2 = fut_emb_feat_2.reshape(-1, 150528)
+        fut_list.append(fut_emb_feat_2)
+        fut_emb_feat_4 = cv2.imread(fut_img_4)
+        fut_emb_feat_4 = torch.from_numpy(fut_emb_feat_4.astype(np.float32)).clone()
+        fut_emb_feat_4 = fut_emb_feat_4.reshape(-1, 150528)
+        fut_list.append(fut_emb_feat_4)
+        fut_emb_feat_6 = cv2.imread(fut_img_6)
+        fut_emb_feat_6 = torch.from_numpy(fut_emb_feat_6.astype(np.float32)).clone()
+        fut_emb_feat_6 = fut_emb_feat_6.reshape(-1, 150528)
+        fut_list.append(fut_emb_feat_6)
+        fut_emb_feat_8 = cv2.imread(fut_img_8)
+        fut_emb_feat_8 = torch.from_numpy(fut_emb_feat_8.astype(np.float32)).clone()
+        fut_emb_feat_8 = fut_emb_feat_8.reshape(-1, 150528)
+        fut_list.append(fut_emb_feat_8)
         fut_emb_feat = cv2.imread(fut_img)
         fut_emb_feat = torch.from_numpy(fut_emb_feat.astype(np.float32)).clone()
         fut_emb_feat = fut_emb_feat.reshape(-1, 150528)
-
-        return emb_feat, all_emb_feat, fut_emb_feat
+        fut_list.append(fut_emb_feat)
+        return emb_feat, all_emb_feat, fut_list
 
     def convert_example_to_features(self, example):
         """
@@ -253,7 +274,7 @@ class RecursiveCaptionDataset(data.Dataset):
         # raw_name: clip_id
         raw_name = example["clip_id"]
         # ver. future
-        emb_feat, all_emb_feat, fut_emb_feat = self._load_ponnet_video_feature(
+        emb_feat, all_emb_feat, fut_list = self._load_ponnet_video_feature(
             raw_name
         )
         video_feature = emb_feat
@@ -266,7 +287,7 @@ class RecursiveCaptionDataset(data.Dataset):
             example["sentence"],
             video_feature,
             gt_feat,
-            fut_emb_feat
+            fut_list
         )
         # single_video_features: video特徴量を含むdict
         single_video_features.append(cur_data)
@@ -279,7 +300,7 @@ class RecursiveCaptionDataset(data.Dataset):
         sentence,
         video_feature,
         gt_feat,
-        fut_emb_feat
+        fut_list
     ):
         """
         make features for a single clip-sentence pair.
@@ -295,7 +316,7 @@ class RecursiveCaptionDataset(data.Dataset):
 
         # future
         feat, video_tokens, video_mask = self._load_indexed_video_feature(
-            video_feature, frm2sec, fut_emb_feat
+            video_feature, frm2sec, fut_list
         )
         text_tokens, text_mask = self._tokenize_pad_sentence(sentence)
 
@@ -347,7 +368,7 @@ class RecursiveCaptionDataset(data.Dataset):
 
     # future
     def _load_indexed_video_feature(
-        self, raw_feat, frm2sec, fut_emb_feat
+        self, raw_feat, frm2sec, fut_list
     ):
         """
         [CLS], [VID], ..., [VID], [SEP], [PAD], ..., [PAD],
@@ -358,8 +379,9 @@ class RecursiveCaptionDataset(data.Dataset):
             mask: self.max_v_len
         """
         # COOT video text data as input
-        max_v_l = self.max_v_len - 2
+        max_v_l = self.max_v_len - 6
         # future
+        # print("raw_feat_0", raw_feat.shape)
         raw_feat, valid_l = self._get_vt_features(
             raw_feat, max_v_l
         )
@@ -375,8 +397,14 @@ class RecursiveCaptionDataset(data.Dataset):
         # includes [CLS], [SEP]
         feat = np.zeros((self.max_v_len + self.max_t_len, raw_feat.shape[1]))
         # feat[1:len(raw_feat) + 1] = raw_feat
+        # print("feat", feat.shape)
+        # print("raw_feat", raw_feat.shape)
         feat[1] = raw_feat
-        feat[2:4] = fut_emb_feat
+        for idx in range(len(fut_list)):
+            # print("feat", feat[idx+2].shape)
+            # print("fut_feat", fut_list[idx].shape)
+            feat[idx+2] = fut_list[idx]
+        feat[7] = fut_list[4]
         # includes [CLS], [SEP]
         return feat, video_tokens, mask
 
