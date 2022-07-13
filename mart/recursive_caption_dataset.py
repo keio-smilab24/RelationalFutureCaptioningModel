@@ -220,42 +220,45 @@ class RecursiveCaptionDataset(data.Dataset):
         """
         # 動画に関する特徴量を取得
         feat_file = raw_name + ".png"
-        all_feat_file = raw_name + ".png"
-        file_n = os.path.join(".", "ponnet_data", "center_future_frames", feat_file)
-        all_feat_n = os.path.join(".", "ponnet_data", "16_center_future_frames", all_feat_file)
-        fut_img = os.path.join(".", "ponnet_data", "4s_16_center_future_frames", feat_file)
-        fut_img_2 = os.path.join(".", "ponnet_data", "3.2s_16_center_future_frames", feat_file)
-        fut_img_4 = os.path.join(".", "ponnet_data", "3.4s_16_center_future_frames", feat_file)
-        fut_img_6 = os.path.join(".", "ponnet_data", "3.6s_16_center_future_frames", feat_file)
-        fut_img_8 = os.path.join(".", "ponnet_data", "3.8s_16_center_future_frames", feat_file)
+        fut_img = os.path.join(".", "ponnet_data", "center_future_frames", feat_file)
+        tmp_img_0 = os.path.join(".", "ponnet_data", "3.0s_center_frames", feat_file)
+        tmp_img_1 = os.path.join(".", "ponnet_data", "3.2s_center_frames", feat_file)
+        tmp_img_2 = os.path.join(".", "ponnet_data", "3.4s_center_frames", feat_file)
+        tmp_img_3 = os.path.join(".", "ponnet_data", "3.6s_center_frames", feat_file)
+        tmp_img_4 = os.path.join(".", "ponnet_data", "3.8s_center_frames", feat_file)
+        tmp_img_5 = os.path.join(".", "ponnet_data", "4.0s_center_frames", feat_file)
+        fut_img = os.path.join(".", "ponnet_data", "4.2s_center_frames", feat_file)
 
-        emb_feat = cv2.imread(file_n)
-        emb_feat = torch.from_numpy(emb_feat.astype(np.float32)).clone()
-        emb_feat = emb_feat.reshape(-1, 150528)
-        # emb_feat = emb_feat.to('cpu').detach().numpy().copy()
-        all_emb_feat = cv2.imread(all_feat_n)
-        fut_list = []
-        fut_emb_feat_2 = cv2.imread(fut_img_2)
-        fut_emb_feat_2 = torch.from_numpy(fut_emb_feat_2.astype(np.float32)).clone()
-        fut_emb_feat_2 = fut_emb_feat_2.reshape(-1, 150528)
-        fut_list.append(fut_emb_feat_2)
-        fut_emb_feat_4 = cv2.imread(fut_img_4)
-        fut_emb_feat_4 = torch.from_numpy(fut_emb_feat_4.astype(np.float32)).clone()
-        fut_emb_feat_4 = fut_emb_feat_4.reshape(-1, 150528)
-        fut_list.append(fut_emb_feat_4)
-        fut_emb_feat_6 = cv2.imread(fut_img_6)
-        fut_emb_feat_6 = torch.from_numpy(fut_emb_feat_6.astype(np.float32)).clone()
-        fut_emb_feat_6 = fut_emb_feat_6.reshape(-1, 150528)
-        fut_list.append(fut_emb_feat_6)
-        fut_emb_feat_8 = cv2.imread(fut_img_8)
-        fut_emb_feat_8 = torch.from_numpy(fut_emb_feat_8.astype(np.float32)).clone()
-        fut_emb_feat_8 = fut_emb_feat_8.reshape(-1, 150528)
-        fut_list.append(fut_emb_feat_8)
-        fut_emb_feat = cv2.imread(fut_img)
-        fut_emb_feat = torch.from_numpy(fut_emb_feat.astype(np.float32)).clone()
-        fut_emb_feat = fut_emb_feat.reshape(-1, 150528)
-        fut_list.append(fut_emb_feat)
-        return emb_feat, all_emb_feat, fut_list
+        fut_img = cv2.imread(fut_img)
+        fut_img = cv2.resize(fut_img, dsize=(16, 16))
+        rec_img = cv2.imread(tmp_img_0)
+        rec_img = cv2.resize(rec_img, dsize=(16, 16))
+        img_list = []
+        img_feat_0 = cv2.imread(tmp_img_0)
+        img_feat_0 = torch.from_numpy(img_feat_0.astype(np.float32)).clone()
+        img_feat_0 = img_feat_0.reshape(-1, 150528)
+        img_list.append(img_feat_0)
+        img_feat_1 = cv2.imread(tmp_img_1)
+        img_feat_1 = torch.from_numpy(img_feat_1.astype(np.float32)).clone()
+        img_feat_1 = img_feat_1.reshape(-1, 150528)
+        img_list.append(img_feat_1)
+        img_feat_2 = cv2.imread(tmp_img_2)
+        img_feat_2 = torch.from_numpy(img_feat_2.astype(np.float32)).clone()
+        img_feat_2 = img_feat_2.reshape(-1, 150528)
+        img_list.append(img_feat_2)
+        img_feat_3 = cv2.imread(tmp_img_3)
+        img_feat_3 = torch.from_numpy(img_feat_3.astype(np.float32)).clone()
+        img_feat_3 = img_feat_3.reshape(-1, 150528)
+        img_list.append(img_feat_3)
+        img_feat_4 = cv2.imread(tmp_img_4)
+        img_feat_4 = torch.from_numpy(img_feat_4.astype(np.float32)).clone()
+        img_feat_4 = img_feat_4.reshape(-1, 150528)
+        img_list.append(img_feat_4)
+        img_feat_5 = cv2.imread(tmp_img_5)
+        img_feat_5 = torch.from_numpy(img_feat_5.astype(np.float32)).clone()
+        img_feat_5 = img_feat_5.reshape(-1, 150528)
+        img_list.append(img_feat_5)
+        return fut_img, img_list, rec_img
 
     def convert_example_to_features(self, example):
         """
@@ -274,20 +277,18 @@ class RecursiveCaptionDataset(data.Dataset):
         # raw_name: clip_id
         raw_name = example["clip_id"]
         # ver. future
-        emb_feat, all_emb_feat, fut_list = self._load_ponnet_video_feature(
+        fut_img, img_list, rec_img = self._load_ponnet_video_feature(
             raw_name
         )
-        video_feature = emb_feat
-        gt_feat = all_emb_feat
         single_video_features = []
         single_video_meta = []
         # cur_data:video特徴量を含むdict
         cur_data, cur_meta = self.clip_sentence_to_feature(
             example["clip_id"],
             example["sentence"],
-            video_feature,
-            gt_feat,
-            fut_list
+            rec_img,
+            img_list,
+            fut_img,
         )
         # single_video_features: video特徴量を含むdict
         single_video_features.append(cur_data)
@@ -298,9 +299,9 @@ class RecursiveCaptionDataset(data.Dataset):
         self,
         name,
         sentence,
-        video_feature,
-        gt_feat,
-        fut_list
+        gt_rec,
+        img_list,
+        fut_img
     ):
         """
         make features for a single clip-sentence pair.
@@ -316,7 +317,7 @@ class RecursiveCaptionDataset(data.Dataset):
 
         # future
         feat, video_tokens, video_mask = self._load_indexed_video_feature(
-            video_feature, frm2sec, fut_list
+            img_list[0], frm2sec, img_list
         )
         text_tokens, text_mask = self._tokenize_pad_sentence(sentence)
 
@@ -346,7 +347,8 @@ class RecursiveCaptionDataset(data.Dataset):
             input_mask=np.array(input_mask).astype(np.float32),
             token_type_ids=np.array(token_type_ids).astype(np.int64),
             video_feature=feat.astype(np.float32),
-            gt_clip = gt_feat.astype(np.float32)
+            gt_clip = fut_img.astype(np.float32),
+            gt_rec = gt_rec.astype(np.float32),
         )
         meta = dict(name=name, sentence=sentence)
         return coll_data, meta
@@ -368,7 +370,7 @@ class RecursiveCaptionDataset(data.Dataset):
 
     # future
     def _load_indexed_video_feature(
-        self, raw_feat, frm2sec, fut_list
+        self, raw_feat, frm2sec, img_list
     ):
         """
         [CLS], [VID], ..., [VID], [SEP], [PAD], ..., [PAD],
@@ -379,7 +381,7 @@ class RecursiveCaptionDataset(data.Dataset):
             mask: self.max_v_len
         """
         # COOT video text data as input
-        max_v_l = self.max_v_len - 6
+        max_v_l = self.max_v_len - 8
         # future
         # print("raw_feat_0", raw_feat.shape)
         raw_feat, valid_l = self._get_vt_features(
@@ -387,11 +389,12 @@ class RecursiveCaptionDataset(data.Dataset):
         )
         video_tokens = (
             [self.CLS_TOKEN]
-            + [self.VID_TOKEN] * valid_l
+            + [self.VID_TOKEN] * (self.max_v_len - 2)
             + [self.SEP_TOKEN]
-            + [self.PAD_TOKEN] * (max_v_l - valid_l)
+            # + [self.PAD_TOKEN] * (max_v_l - valid_l)
         )
-        mask = [1] * (valid_l + 2) + [0] * (max_v_l - valid_l)
+        # mask = [1] * (self.max_v_len) + [0] * (max_v_l - valid_l)
+        mask = [1] * self.max_v_len
         # 上記のように特徴量を配置
         # feat∈25×1152
         # includes [CLS], [SEP]
@@ -400,11 +403,11 @@ class RecursiveCaptionDataset(data.Dataset):
         # print("feat", feat.shape)
         # print("raw_feat", raw_feat.shape)
         feat[1] = raw_feat
-        for idx in range(len(fut_list)):
+        for idx in range(len(img_list)):
             # print("feat", feat[idx+2].shape)
-            # print("fut_feat", fut_list[idx].shape)
-            feat[idx+2] = fut_list[idx]
-        feat[7] = fut_list[4]
+            # print("fut_feat", img_list[idx].shape)
+            feat[idx+2] = img_list[idx]
+        feat[7] = img_list[4]
         # includes [CLS], [SEP]
         return feat, video_tokens, mask
 

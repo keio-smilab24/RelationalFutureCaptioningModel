@@ -373,6 +373,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                     ]
                     input_labels_list = [e["input_labels"] for e in batched_data]
                     gt_clip = [e["gt_clip"] for e in batched_data]
+                    gt_rec = [e["gt_rec"] for e in batched_data]
                     if self.cfg.debug:
                         cur_data = batched_data[step]
                         self.logger.info(
@@ -399,6 +400,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                         token_type_ids_list,
                         input_labels_list,
                         gt_clip,
+                        gt_rec,
                         train = True
                     )
                     self.train_steps += 1
@@ -577,6 +579,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                     token_type_ids_list = [e["token_type_ids"] for e in batched_data]
                     input_labels_list = [e["input_labels"] for e in batched_data]
                     gt_clip = [e["gt_clip"] for e in batched_data]
+                    gt_rec = [e["gt_rec"] for e in batched_data]
 
                     # ver. future
                     loss, pred_scores_list = self.model(
@@ -585,7 +588,8 @@ class MartTrainer(trainer_base.BaseTrainer):
                         input_masks_list,
                         token_type_ids_list,
                         input_labels_list,
-                        gt_clip
+                        gt_clip,
+                        gt_rec,
                     )
                     batch_loss += loss
                     batch_idx += 1
@@ -858,6 +862,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                     token_type_ids_list = [e["token_type_ids"] for e in batched_data]
                     input_labels_list = [e["input_labels"] for e in batched_data]
                     gt_clip = [e["gt_clip"] for e in batched_data]
+                    gt_rec = [e["gt_rec"] for e in batched_data]
 
                     # ver. future
                     loss, pred_scores_list = self.model(
@@ -866,7 +871,8 @@ class MartTrainer(trainer_base.BaseTrainer):
                         input_masks_list,
                         token_type_ids_list,
                         input_labels_list,
-                        gt_clip
+                        gt_clip,
+                        gt_rec
                     )
                     batch_loss += loss
                     batch_idx += 1

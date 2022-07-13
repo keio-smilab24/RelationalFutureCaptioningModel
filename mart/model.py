@@ -257,6 +257,7 @@ class Attention(nn.Module):
         super().__init__()
         self.self = SelfAttention(cfg)
         self.output = SelfOutput(cfg)
+        self.layernorm = nn.LayerNorm(cfg.hidden_size)
 
     def forward(self, x, attention_mask=None, clip_his=None):
         """
@@ -265,6 +266,7 @@ class Attention(nn.Module):
             attention_mask: (N, Lq, L)
         Returns:
         """
+        # x = self.layernorm(x)
         if clip_his is not None:
             self_output = self.self(clip_his, x, x, attention_mask)
         else:
@@ -389,9 +391,17 @@ class LayerWoMemory(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
+        self.att_num = 2
+        # self.attention = nn.ModuleList(
+        #     [Attention(cfg) for _ in range(self.att_num)]
+        # )
+        self.mmha = Attention(cfg)
+        self.mha = Attention(cfg)
         self.attention = Attention(cfg)
         self.hidden_intermediate = Intermediate(cfg)
         self.output = Output(cfg)
+        self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
+        self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
 
     def forward(self, hidden_states, attention_mask, clip_feats=None):
         """
@@ -406,9 +416,14 @@ class LayerWoMemory(nn.Module):
         shifted_self_mask = make_pad_shifted_mask(
             attention_mask, max_v_len, max_t_len
         )  # (N, L, L)
-        attention_output = self.attention(hidden_states, shifted_self_mask, clip_feats)
-        intermediate_output = self.hidden_intermediate(attention_output)
-
+        # attention_output = self.mmha(hidden_states, shifted_self_mask, clip_feats)
+        # attention_output = self.mha(attention_output)
+        hidden_states = self.attention(hidden_states, shifted_self_mask, clip_feats)
+        # intermediate_output = self.ffn(attention_output)
+        # intermediate_output = self.LayerNorm(intermediate_output)
+        attention_output = self.LayerNorm(hidden_states)
+        # intermediate_output = self.hidden_intermediate(attention_output)
+        intermediate_output = self.output(attention_output, hidden_states)
         return intermediate_output
 
 
@@ -501,8 +516,12 @@ class TrmEncLayer(nn.Module):
         # self.attention = Attention(cfg)
         self.attention = MultiHeadRSA(cfg)
         self.output = TrmFeedForward(cfg)
+        self.hidden_size = cfg.hidden_size
 
-        # self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
+        self.z = torch.randn(1, requires_grad=True).cuda()
+        self.rand = torch.randn(1, requires_grad=True).cuda()
+        self.ffn = FeedforwardNeuralNetModel(self.hidden_size, self.hidden_size * 2, self.hidden_size)
 
     def forward(self, x):
         """
@@ -510,13 +529,21 @@ class TrmEncLayer(nn.Module):
             x: (N, L, D)
         Returns:
         """
-        tmp_x = x.clone()
-        target = x[:, 1, :].clone()
-        # target = self.LayerNorm(target)
+        # tmp_x = x.clone().cuda()
+        # x = self.LayerNorm(x)
+        tmp_x = x.clone().cuda()
+        target = tmp_x.clone().cuda()
         target = self.attention(target, tmp_x)
-        x[:, 1, :] = target.clone()
+        x = target.clone().cuda()
+        x = self.z * tmp_x + (1 - self.z) * x
+        x = self.LayerNorm(x)
+        tmp_x = x.clone().cuda()
+        # x = self.LayerNorm(x)
+        x = self.ffn(x)
+        x = self.rand * tmp_x + (1 - self.rand) * x
+        x = self.LayerNorm(x)
         # x = self.attention(x)
-        x = self.output(x, x)  # (N, L, D)
+        # x = self.output(x, x)  # (N, L, D)
         return x
 
 
@@ -532,7 +559,8 @@ class TimeSeriesEncoder(nn.Module):
         x = self.pe(x)
         for layer in self.layers:
             x = layer(x)
-        x = self.ff(x, x)
+        # x = self.ff(x, x)
+
         return x
 
 
@@ -608,6 +636,8 @@ class EmbeddingsWithVideo(nn.Module):
         words_embeddings = self.word_fc(self.word_embeddings(input_ids))
         video_embeddings = self.video_embeddings(video_features)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
+        # print("token_type_embeddings", token_type_embeddings.shape)
+        # print("word_embedding", words_embeddings.shape)
         words_embeddings += token_type_embeddings
         embeddings = words_embeddings + video_embeddings + token_type_embeddings
 
@@ -621,64 +651,76 @@ class EmbeddingsWithVideo(nn.Module):
 
 
 class MultiHeadRSA(nn.Module):
-    def __init__(self, cfg, m=3):
+    def __init__(self, cfg, m=7):
         super().__init__()
         self.cfg = cfg
         self.m = m
-        self.hidden_size = 768
-        self.head = 12
-        tmp_size = self.hidden_size // self.head
+        self.hidden_size = cfg.hidden_size
+        self.head = cfg.max_v_len - 2
         self.query_layer = nn.Linear(self.hidden_size, self.hidden_size)
         self.key_layer = nn.Linear(self.hidden_size, self.hidden_size)
         self.value_layer = nn.Linear(self.hidden_size, self.hidden_size)
-        self.p = torch.randn((self.head, m, tmp_size), requires_grad=True).cuda()
+        self.p = torch.randn((self.head, m, self.hidden_size), requires_grad=True).cuda()
         self.h =\
-            torch.randn((self.head, m * tmp_size, m), requires_grad=True).cuda()
-        self.g = torch.randn((self.head, m, tmp_size), requires_grad=True).cuda()
+            torch.randn((self.head, m * self.hidden_size, m), requires_grad=True).cuda()
+        self.g = torch.randn((self.head, m, self.hidden_size), requires_grad=True).cuda()
         self.one = torch.ones((m, 1)).cuda()
         # self.ffn = FeedforwardNeuralNetModel(self.hidden_size, self.hidden_size * 2, self.hidden_size)
         # self.ln = nn.LayerNorm(self.hidden_size)
 
     def forward(self, target, cont):
-        if self.hidden_size % self.head == 0:
-            query = self.query_layer(target).reshape(-1, self.hidden_size, 1)
-            key = self.key_layer(cont)
-            value = self.value_layer(cont)
+        # batch_size = target.size()[0]
+        # query = torch.zeros((batch_size, self.head, self.tmp_size)).cuda()
+        # # print("query", query.shape)
+        # for idx in range(self.head):
+        #     if(idx < self.num_img):
+        #         tmp_query = self.query_layer(target[:,idx,:])
+        #         # print("tmp", tmp_query.shape)
+        #         # print("query_idx", query[:,idx,:].shape)
+        #         query[:,idx,:] = tmp_query
+        #     else:
+        #         new_idx = idx
+        #         while(new_idx >= self.num_img):
+        #             new_idx -= self.num_img
+        #         tmp_query = self.query_layer(target[:,new_idx,:])
+        #         query[:,idx,:] = tmp_query
 
-            tmp_size = self.hidden_size // self.head
-            query = query.reshape((-1, 1, self.head, tmp_size)).permute(0, 2, 1, 3)
-            key = key.reshape((-1, self.m, self.head, tmp_size)).permute(0, 2, 1, 3)
-            value = value.reshape((-1, self.m, self.head, tmp_size)).permute(0, 2, 1, 3)
+        query = self.query_layer(target)
+        key = self.key_layer(cont).reshape(-1, 1, self.head, self.hidden_size)
+        key = key.repeat((1,self.head,1,1))
+        value = self.value_layer(cont).reshape(-1, 1, self.head, self.hidden_size)
+        value = value.repeat((1,self.head,1,1))
 
-            # basic kernel
-            kernel_v = torch.matmul(self.p, query.permute(0, 1, 3, 2)).reshape(-1, self.head, 1, self.m)
+        query = query.reshape((-1, 1, self.head, self.hidden_size)).permute(0, 2, 1, 3)
+        key = key.reshape((-1, self.m, self.head, self.hidden_size)).permute(0, 2, 1, 3)
+        value = value.reshape((-1, self.m, self.head, self.hidden_size)).permute(0, 2, 1, 3)
 
-            # relational kernel
-            q = torch.matmul(self.one, query)
-            # q = F.softmax(q)
-            x_q = torch.mul(q, key)
-            x_q = x_q.reshape((-1, self.head, 1, self.m * tmp_size))
-            kernel_r = torch.matmul(x_q, self.h).reshape(-1, self.head, 1, self.m)
-            kernel = kernel_v + kernel_r
+        # basic kernel
+        kernel_v = torch.matmul(self.p, query.permute(0, 1, 3, 2)).reshape(-1, self.head, 1, self.m)
 
-            # basic context
-            # basic_cont = context.clone()
+        # relational kernel
+        q = torch.matmul(self.one, query)
+        # q = F.softmax(q)
+        x_q = torch.mul(q, key)
+        x_q = x_q.reshape((-1, self.head, 1, self.m * self.hidden_size))
+        kernel_r = torch.matmul(x_q, self.h).reshape(-1, self.head, 1, self.m)
+        kernel = kernel_v + kernel_r
 
-            # relational context
-            xg = value.clone()
-            xg = torch.transpose(xg, 2, 3)
-            _xg = torch.matmul(xg, self.g)
-            x_nr = torch.matmul(value, _xg)
-            context = x_nr + value
+        # basic context
+        # basic_cont = context.clone()
 
-            output = torch.matmul(kernel, context).reshape(-1, self.hidden_size)
-            # output = F.softmax(output)
-            # output = self.ln(output)
-            # output = self.ffn(output)
-            return output
-        else:
-            print("hidden_size/head was wrong", file=sys.stderr)
-            sys.exit(1)
+        # relational context
+        xg = value.clone()
+        xg = torch.transpose(xg, 2, 3)
+        _xg = torch.matmul(xg, self.g)
+        x_nr = torch.matmul(value, _xg)
+        context = x_nr + value
+
+        output = torch.matmul(kernel, context).reshape(-1, self.head, self.hidden_size)
+        # output = F.softmax(output)
+        # output = self.ln(output)
+        # output = self.ffn(output)
+        return output
 
 
 class FeedforwardNeuralNetModel(nn.Module):
@@ -831,7 +873,7 @@ class TimeSeriesMoudule(nn.Module):
         super().__init__()
         self.cfg = cfg
         # self.cfg.hidden_size = 768
-        self.hidden_size = 768
+        self.hidden_size = cfg.hidden_size
         self.TSEncoder = TimeSeriesEncoder(self.cfg)
         self.expand = nn.Linear(self.cfg.hidden_size, self.hidden_size)
         self.layernorm = nn.LayerNorm(self.hidden_size)
@@ -883,7 +925,7 @@ class CLIPloss(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.w = nn.Linear(20 * 768, 768)
+        self.w = nn.Linear(22 * 768, 768)
         self.t = torch.randn(1, requires_grad=True).cuda()
         self.i_loss = nn.CrossEntropyLoss(ignore_index=0)
         self.t_loss = nn.CrossEntropyLoss(ignore_index=1)
@@ -977,63 +1019,35 @@ class RecursiveTransformer(nn.Module):
             module.bias.data.zero_()
 
     def forward_step(
-        self, input_ids, video_features, input_masks, token_type_ids, gt_clip=None
+        self, input_ids, video_features, input_masks, token_type_ids
     ):
         """
         single step forward in the recursive structure
         """
-        # future_b = video_features[:, 1, :].clone()
-        # fut_emb = video_features[:, 7, :].clone()
         fut_emb_list = video_features[:, 1:8, :].clone()
+        # print("fut_emb_list", fut_emb_list.shape)
         video_features = self.size_adjust(video_features)
-        self.future_rec = []
-        self.future_gt = []
-        if gt_clip is None:
-            gt_clip = video_features[:, 1:8, :].clone().cuda()
-        # preprocess
-        # clip_feats = torch.zeros(video_features[:, 1:4, :].shape).cuda()
-        # clip_feats[:, 0:3, :] = video_features[:, 1:4, :].clone()
-
-        # future_b = torch.zeros(video_features[:, 3, :].shape)
-        # future_b = video_features[:, 3, :].clone()
-        # print(future_b.shape)
-        fut_mlp_list = []
+        self.pred_reconst = []
+        self.gt_rec = []
         for idx in range(7):
             # print("video", video_features[:, idx+1, :].shape)
             # print("feat", self.mlp(fut_emb_list[:, idx, :]).shape)
             video_features[:, idx+1, :] = self.mlp(fut_emb_list[:, idx, :]).clone()
         fut_emb_list = video_features[:, 1:8, :].clone()
-        future_b = fut_emb_list[0].clone()
-        fut_emb = fut_emb_list[6].clone()
+        # print("fut_emb_list", fut_emb_list.shape)
+        rec_tmp = fut_emb_list[:, 0, :].clone()
+        fut_clip = fut_emb_list[:, 6, :].clone()
 
-        # future_b = self.pred_f(future_b)
-        # tmp_feat_f = clip_feats[:, 2, :].clone().cuda()
-        # clip_feats[:, 2, :] = future_b
-
-        # tmp_zeros = torch.zeros(video_features[:, 1, :].shape).cuda() + future_b.reshape(-1, 1, 768)
-        # print('tmp_zeros', tmp_zeros.shape)
-        # print('video_feature', video_features[:, 1, :].shape)
-        # video_features[:, 1, :] = future_b.clone()
-        # fut_zeros = torch.zeros(video_features[:, 2:4, :].shape).cuda() + fut_emb.reshape(-1, 1, 768)
-        # video_features[:, 2, :] = fut_emb.clone()
-        # video_features[:, 3, :] = fut_emb.clone()
-        clip_feats = video_features[:, 1:8, :].clone()
-
-        # past_feats = gt_clip[:, 0, :].reshape((-1, 1, 384)).clone().cuda()
-        # tmp_feats = clip_feats[:, 0, :].reshape((-1, 1, 384)).clone().cuda()
-        # past_feats = self.z_p * tmp_feats + (1 - self.z_p) * past_feats
-        # clip_feats[:, 0, :] = past_feats.reshape((-1, 384))
-
-        # clip_feats = self.ff(clip_feats)
+        clip_feats = fut_emb_list.clone()
 
         # Time Series Module
         _, clip_feats = self.TSModule(clip_feats)
 
+        # print("input_ids", input_ids.shape)
+
         embeddings = self.embeddings(
             input_ids, video_features, token_type_ids
         )  # (N, L, D)
-        # clip_his = torch.zeros((embeddings.shape)).cuda()
-        # clip_his = clip_his + ts_feats
         encoded_layer_outputs = self.encoder(
             embeddings, input_masks, output_all_encoded_layers=False
         )  # both outputs are list
@@ -1043,9 +1057,7 @@ class RecursiveTransformer(nn.Module):
         prediction_scores = self.decoder(
             decoded_layer_outputs[-1]
         )  # (N, L, vocab_size)
-        # future_b = self.upsampling(future_b)
-        return encoded_layer_outputs, prediction_scores, future_b
-        # return encoded_layer_outputs, prediction_scores
+        return encoded_layer_outputs, prediction_scores, rec_tmp, fut_clip
 
     # ver. future
     def forward(
@@ -1056,6 +1068,7 @@ class RecursiveTransformer(nn.Module):
         token_type_ids_list,
         input_labels_list,
         gt_clip=None,
+        gt_rec=None,
         train = False,
     ):
         """
@@ -1071,24 +1084,30 @@ class RecursiveTransformer(nn.Module):
 
         Returns:
         """
+        # print("input_ids_list", input_ids_list[0].shape)
         # [(N, M, D)] * num_hidden_layers, initialized internally
         step_size = len(input_ids_list)
         # print("step_size: ", step_size)
         encoded_outputs_list = []  # [(N, L, D)] * step_size
         prediction_scores_list = []  # [(N, L, vocab_size)] * step_size
-        future_rec = []
-        future_gt = []
+        pred_reconst = []
+        pred_fut = []
+        gt_reconst = []
+        gt_fut = []
         action_score = []
-        if gt_clip is not None:
+        fut_loss = 0
+        if gt_rec is not None:
             for idx in range(step_size):
-                encoded_layer_outputs, prediction_scores, pred_future = self.forward_step(
+                encoded_layer_outputs, prediction_scores, pred_tmp, fut_clip = self.forward_step(
                     input_ids_list[idx],
                     video_features_list[idx],
                     input_masks_list[idx],
                     token_type_ids_list[idx]
                 )
-                future_gt.append(gt_clip[idx])
-                future_rec.append(pred_future)
+                gt_fut.append(gt_clip[idx])
+                gt_reconst.append(gt_rec[idx])
+                pred_reconst.append(pred_tmp)
+                pred_fut.append(fut_clip)
                 # print(type(encoded_layer_outputs[0]))
                 encoded_outputs_list.append(encoded_layer_outputs)
                 prediction_scores_list.append(prediction_scores)
@@ -1113,48 +1132,49 @@ class RecursiveTransformer(nn.Module):
             )
             gt_action_list = input_labels_list[idx][:, 7]
             act_score_list = action_score[idx].cpu()
-            action_loss = 0.0
+            iwp_loss = 0.0
             for actidx in range(len(gt_action_list)):
                 gt_action = torch.tensor([gt_action_list[actidx]], dtype=int)
                 gt_idx = gt_action.tolist()
                 if gt_idx[0] == -1:
                     continue
                 if gt_idx[0] in ACTION_WEIGHT:
-                    action_loss += (1 / ACTION_WEIGHT[gt_idx[0]]) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
+                    iwp_loss += (1 / ACTION_WEIGHT[gt_idx[0]]) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
                 else:
-                    action_loss += (1 / 300) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
-            cont_loss = 0.0
+                    iwp_loss += (1 / 300) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
+            clip_loss = 0.0
 
-            cont_loss += self.cliploss(future_rec[idx], encoded_outputs_list[idx][0][:, 9:, :])
-            if gt_clip is not None:
-                # print("rec", future_rec[idx].shape)
-                # print("gt", future_gt[idx].shape)
-                fut_loss = self.future_loss(future_rec[idx].reshape(-1, 16, 16, 3), future_gt[idx] / 255.)
-                for i in range(future_rec[idx].size()[0]):
-                    # print("rec", future_rec[idx][i].shape)
-                    # print("gt", future_gt[idx][i].shape)
+            clip_loss += self.cliploss(pred_reconst[idx], encoded_outputs_list[idx][0][:, 9:, :])
+            if gt_rec is not None:
+                # print("rec", pred_reconst[idx].shape)
+                # print("gt", gt_rec[idx].shape)
+                rec_loss = self.future_loss(pred_reconst[idx].reshape(-1, 16, 16, 3), gt_reconst[idx] / 255.)
+                # for i in range(pred_reconst[idx].size()[0]):
+                #     # print("rec", pred_reconst[idx][i].shape)
+                #     # print("gt", gt_rec[idx][i].shape)
 
-                    tmp_img = future_rec[idx][i].reshape(16, 16, 3)
-                    gt_img = future_gt[idx][i]
-                    # tmp_img = future_rec[idx][i].reshape(16, 16, 3)
-                    # gt_img = future_gt[idx][i].reshape(16, 16, 3)
-                    tmp_img = tmp_img.to('cpu').detach().numpy().copy()
-                    tmp_img = np.clip(tmp_img * 255, a_min = 0, a_max = 255).astype(np.uint8)
-                    gt_img = gt_img.to('cpu').detach().numpy().copy().astype(np.uint8)
-                    # gt_img = np.clip(gt_img * 255, a_min = 0, a_max = 255).astype(np.uint8)
-                    # print("tmp", tmp_img.shape)
-                    # print(gt_img.shape)
-                    if train:
-                        tmp_img = cv2.resize(tmp_img, dsize=(256, 256))
-                        gt_img = cv2.resize(gt_img, dsize=(256, 256))
-                        cv2.imwrite(os.path.join("./tmp_img_id73", str(self.idx) + "pred.png"), tmp_img)
-                        cv2.imwrite(os.path.join("./tmp_img_id73", str(self.idx) + "gt.png"), gt_img)
-                    self.idx += 1
-                self.idx = 0
+                #     tmp_img = pred_reconst[idx][i].reshape(16, 16, 3)
+                #     gt_img = gt_rec[idx][i]
+                #     # tmp_img = pred_reconst[idx][i].reshape(16, 16, 3)
+                #     # gt_img = gt_rec[idx][i].reshape(16, 16, 3)
+                #     tmp_img = tmp_img.to('cpu').detach().numpy().copy()
+                #     tmp_img = np.clip(tmp_img * 255, a_min = 0, a_max = 255).astype(np.uint8)
+                #     gt_img = gt_img.to('cpu').detach().numpy().copy().astype(np.uint8)
+                #     # gt_img = np.clip(gt_img * 255, a_min = 0, a_max = 255).astype(np.uint8)
+                #     # print("tmp", tmp_img.shape)
+                #     # print(gt_img.shape)
+                #     if train:
+                #         tmp_img = cv2.resize(tmp_img, dsize=(256, 256))
+                #         gt_img = cv2.resize(gt_img, dsize=(256, 256))
+                #         cv2.imwrite(os.path.join("./tmp_img_id73", str(self.idx) + "pred.png"), tmp_img)
+                #         cv2.imwrite(os.path.join("./tmp_img_id73", str(self.idx) + "gt.png"), gt_img)
+                #     self.idx += 1
+                # self.idx = 0
 
-            # caption_loss += 0.9 * snt_loss
-            # caption_loss += fut_loss
-            caption_loss += 0.9 * snt_loss + 1000 * fut_loss + 1 * cont_loss + action_loss / 100
-            # caption_loss += 0.9 * snt_loss + 0.1 * fut_loss + (1 / cont_loss)
+            if gt_clip is not None and train:
+                fut_loss += self.future_loss(pred_fut[idx].reshape(-1, 16, 16, 3), gt_fut[idx] / 255.)
+
+            # caption_loss += 0.9 * snt_loss + 1000 * rec_loss + 1 * clip_loss + iwp_loss / 100 + 1 * fut_loss
+            caption_loss += 0.9 * snt_loss + 1000 * rec_loss + 1 * clip_loss + iwp_loss / 100
         caption_loss /= step_size
         return caption_loss, prediction_scores_list
