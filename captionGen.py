@@ -4,8 +4,8 @@ import os
 import csv
 
 def main_train():
-    csv_name = './annotations/ponnet/train.csv'
-    output_file = './annotations/ponnet/captioning_train.json'
+    csv_name = './annotations/ponnet/dataset_train.csv'
+    output_file = './annotations/BILA/captioning_train.json'
     with open(csv_name, 'r') as f:
         reader = csv.reader(f, delimiter=',')
         clip_list = []
@@ -18,8 +18,8 @@ def main_train():
 
 
 def main_valid():
-    csv_name = './annotations/ponnet/val.csv'
-    output_file = './annotations/ponnet/captioning_val.json'
+    csv_name = './annotations/ponnet/dataset_valid.csv'
+    output_file = './annotations/BILA/captioning_val.json'
     with open(csv_name, 'r') as f:
         reader = csv.reader(f, delimiter=',')
         clip_list = []
@@ -32,8 +32,8 @@ def main_valid():
 
 
 def main_test():
-    csv_name = './annotations/ponnet/test.csv'
-    output_file = './annotations/ponnet/captioning_test.json'
+    csv_name = './annotations/ponnet/dataset_test.csv'
+    output_file = './annotations/BILA/captioning_test.json'
     with open(csv_name, 'r') as f:
         reader = csv.reader(f, delimiter=',')
         clip_list = []

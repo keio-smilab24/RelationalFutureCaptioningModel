@@ -117,7 +117,7 @@ def save_frame_sec(video_path, sec, result_path):
 
 if __name__ == "__main__":
     # frame_dir = "./ponnet_data/4s_center_frames/"
-    clip_file = "./ponnet_data/1000samples.csv"
+    clip_file = "./annotations/ponnet/1100sample.csv"
 
     with open(clip_file, 'r') as f:
         reader = csv.reader(f, delimiter=",")
@@ -134,7 +134,7 @@ if __name__ == "__main__":
         with open(clip_file, 'r') as f:
             reader = csv.reader(f, delimiter=",")
             for row in tqdm(reader):
-                file_name = '_' + row[0] + '.mp4'
+                file_name = row[0] + '.mp4'
                 # dir_name = frame_dir + file_name.replace(".mov", "")
                 # out_dir = "./ponnet_data/" + str(3 + sec * 0.2) + "s_16_center_future_frames"
                 out_file = "./ponnet_data/" + str(3 + sec * 0.2) + "s_center_frames/" + row[0] + ".png"

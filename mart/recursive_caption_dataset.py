@@ -220,16 +220,15 @@ class RecursiveCaptionDataset(data.Dataset):
         """
         # 動画に関する特徴量を取得
         feat_file = raw_name + ".png"
-        fut_img = os.path.join(".", "ponnet_data", "center_future_frames", feat_file)
         tmp_img_0 = os.path.join(".", "ponnet_data", "3.0s_center_frames", feat_file)
         tmp_img_1 = os.path.join(".", "ponnet_data", "3.2s_center_frames", feat_file)
         tmp_img_2 = os.path.join(".", "ponnet_data", "3.4s_center_frames", feat_file)
         tmp_img_3 = os.path.join(".", "ponnet_data", "3.6s_center_frames", feat_file)
         tmp_img_4 = os.path.join(".", "ponnet_data", "3.8s_center_frames", feat_file)
         tmp_img_5 = os.path.join(".", "ponnet_data", "4.0s_center_frames", feat_file)
-        fut_img = os.path.join(".", "ponnet_data", "4.2s_center_frames", feat_file)
+        fut_img_path = os.path.join(".", "ponnet_data", "4.2s_center_frames", feat_file)
 
-        fut_img = cv2.imread(fut_img)
+        fut_img = cv2.imread(fut_img_path)
         fut_img = cv2.resize(fut_img, dsize=(16, 16))
         rec_img = cv2.imread(tmp_img_0)
         rec_img = cv2.resize(rec_img, dsize=(16, 16))

@@ -401,6 +401,8 @@ class LayerWoMemory(nn.Module):
         self.hidden_intermediate = Intermediate(cfg)
         self.output = Output(cfg)
         self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
+        self.rand = torch.randn(1, requires_grad=True).cuda()
+        self.rand_z = torch.randn(1, requires_grad=True).cuda()
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
 
     def forward(self, hidden_states, attention_mask, clip_feats=None):
@@ -418,13 +420,19 @@ class LayerWoMemory(nn.Module):
         )  # (N, L, L)
         # attention_output = self.mmha(hidden_states, shifted_self_mask, clip_feats)
         # attention_output = self.mha(attention_output)
+        tmp_x = hidden_states.clone().cuda()
+        hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.attention(hidden_states, shifted_self_mask, clip_feats)
+        hidden_states = self.rand * tmp_x + (1 - self.rand) * hidden_states
+        tmp_x = hidden_states.clone().cuda()
+        hidden_states = self.LayerNorm(hidden_states)
         # intermediate_output = self.ffn(attention_output)
         # intermediate_output = self.LayerNorm(intermediate_output)
-        attention_output = self.LayerNorm(hidden_states)
-        # intermediate_output = self.hidden_intermediate(attention_output)
-        intermediate_output = self.output(attention_output, hidden_states)
-        return intermediate_output
+        # attention_output = self.LayerNorm(hidden_states)
+        intermediate_output = self.hidden_intermediate(hidden_states)
+        layer_output = self.rand_z * tmp_x + (1 - self.rand_z) * intermediate_output
+        # intermediate_output = self.output(attention_output, hidden_states)
+        return layer_output
 
 
 class EncoderWoMemory(nn.Module):
@@ -461,6 +469,10 @@ class DecoderLayer(nn.Module):
         self.cfg = cfg
         self.attention = Attention(cfg)
         self.output = TrmFeedForward(cfg)
+        self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
+        self.rand = torch.randn(1, requires_grad=True).cuda()
+        self.rand_z = torch.randn(1, requires_grad=True).cuda()
+        self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
 
     def forward(self, x, attention_mask, clip_his):
         """
@@ -475,7 +487,14 @@ class DecoderLayer(nn.Module):
         shifted_self_mask = make_pad_shifted_mask(
             attention_mask, max_v_len, max_t_len, decoder=True
         )  # (N, L, L)
+        # tmp_x = x.clone().cuda()
+        # x = self.LayerNorm(x)
         att = self.attention(x, shifted_self_mask, clip_his)
+        # hidden_states = self.rand * tmp_x + (1 - self.rand) * att
+        # tmp_x = hidden_states.clone().cuda()
+        # hidden_states = self.LayerNorm(hidden_states)
+        # hidden_states = self.ffn(hidden_states)
+        # layer_output = self.rand_z * tmp_x + (1 - self.rand_z) * hidden_states
         layer_output = self.output(att, att)  # (N, L, D)
         return layer_output
 
