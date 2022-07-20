@@ -141,7 +141,7 @@ class RecursiveCaptionDataset(data.Dataset):
         # ---------- Load metadata ----------
 
         # determine metadata file
-        tmp_path = "ponnet"
+        tmp_path = "BILA"
         if mode == "train":  # 1333 videos
             data_path = self.annotations_dir / tmp_path / "captioning_train.json"
         elif mode == "val":  # 457 videos

@@ -487,15 +487,16 @@ class DecoderLayer(nn.Module):
         shifted_self_mask = make_pad_shifted_mask(
             attention_mask, max_v_len, max_t_len, decoder=True
         )  # (N, L, L)
-        # tmp_x = x.clone().cuda()
-        # x = self.LayerNorm(x)
+        tmp_x = x.clone().cuda()
+        x = self.LayerNorm(x)
         att = self.attention(x, shifted_self_mask, clip_his)
-        # hidden_states = self.rand * tmp_x + (1 - self.rand) * att
-        # tmp_x = hidden_states.clone().cuda()
-        # hidden_states = self.LayerNorm(hidden_states)
-        # hidden_states = self.ffn(hidden_states)
-        # layer_output = self.rand_z * tmp_x + (1 - self.rand_z) * hidden_states
-        layer_output = self.output(att, att)  # (N, L, D)
+        hidden_states = self.rand * tmp_x + (1 - self.rand) * att
+        hidden_states = self.LayerNorm(hidden_states)
+        tmp_x = hidden_states.clone().cuda()
+        hidden_states = self.ffn(hidden_states)
+        layer_output = self.rand_z * tmp_x + (1 - self.rand_z) * hidden_states
+        # layer_output = self.output(att, att)  # (N, L, D)
+        layer_output = self.LayerNorm(layer_output)
         return layer_output
 
 
@@ -1194,6 +1195,6 @@ class RecursiveTransformer(nn.Module):
                 fut_loss += self.future_loss(pred_fut[idx].reshape(-1, 16, 16, 3), gt_fut[idx] / 255.)
 
             # caption_loss += 0.9 * snt_loss + 1000 * rec_loss + 1 * clip_loss + iwp_loss / 100 + 1 * fut_loss
-            caption_loss += 0.9 * snt_loss + 1000 * rec_loss + 1 * clip_loss + iwp_loss / 100
+            caption_loss += 0.9 * snt_loss + 1000 * rec_loss + 10 * clip_loss + iwp_loss / 100
         caption_loss /= step_size
         return caption_loss, prediction_scores_list
