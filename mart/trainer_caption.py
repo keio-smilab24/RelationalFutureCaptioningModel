@@ -347,6 +347,9 @@ class MartTrainer(trainer_base.BaseTrainer):
             n_word_correct = 0
             num_steps = 0
             batch_loss = 0.0
+            batch_snt_loss = 0.0
+            batch_rec_loss = 0.0
+            batch_clip_loss = 0.0
 
             # ---------- Data　loader Iteration ----------
             for step, batch in enumerate(tqdm(train_loader)):
@@ -393,7 +396,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                             )
                         )
                     # ver. future
-                    loss, pred_scores_list = self.model(
+                    loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                         input_ids_list,
                         video_features_list,
                         input_masks_list,
@@ -406,6 +409,9 @@ class MartTrainer(trainer_base.BaseTrainer):
                     self.train_steps += 1
                     num_steps += 1
                     batch_loss += loss
+                    batch_snt_loss += snt_loss
+                    batch_rec_loss += rec_loss
+                    batch_clip_loss += clip_loss
 
                 self.hook_post_forward_step_timer()  # hook for step timing
 
@@ -472,8 +478,14 @@ class MartTrainer(trainer_base.BaseTrainer):
             self.metrics.update_meter(MMeters.TRAIN_ACC, accuracy)
             # return loss_per_word, accuracy
             batch_loss /= num_steps
+            batch_snt_loss /= num_steps
+            batch_rec_loss /= num_steps
+            batch_clip_loss /= num_steps
             if self.wandb_flag == 1:
                 wandb.log({"train_loss": batch_loss})
+                wandb.log({"train_snt_loss": batch_snt_loss})
+                wandb.log({"train_rec_loss": batch_rec_loss})
+                wandb.log({"train_clip_loss": batch_clip_loss})
 
             # ---------- validation ----------
             do_val = self.check_is_val_epoch()
@@ -537,6 +549,9 @@ class MartTrainer(trainer_base.BaseTrainer):
         n_word_total = 0
         n_word_correct = 0
         batch_loss = 0.0
+        batch_snt_loss = 0.0
+        batch_rec_loss = 0.0
+        batch_clip_loss = 0.0
         batch_idx = 0
 
         # setup ema
@@ -582,7 +597,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                     gt_rec = [e["gt_rec"] for e in batched_data]
 
                     # ver. future
-                    loss, pred_scores_list = self.model(
+                    loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                         input_ids_list,
                         video_features_list,
                         input_masks_list,
@@ -592,6 +607,9 @@ class MartTrainer(trainer_base.BaseTrainer):
                         gt_rec,
                     )
                     batch_loss += loss
+                    batch_snt_loss += snt_loss
+                    batch_rec_loss += rec_loss
+                    batch_clip_loss += clip_loss
                     batch_idx += 1
                     # translate (no ground truth text)
                     step_sizes = batch[1]  # list(int), len == bsz
@@ -660,10 +678,16 @@ class MartTrainer(trainer_base.BaseTrainer):
 
         # ---------- validation done ----------
         batch_loss /= batch_idx
+        batch_snt_loss /= batch_idx
+        batch_rec_loss /= batch_idx
+        batch_clip_loss /= batch_idx
         loss_delta = self.beforeloss - batch_loss
         if self.wandb_flag == 1:
             wandb.log({"val_loss_diff": loss_delta})
             wandb.log({"val_loss": batch_loss})
+            wandb.log({"val_snt_loss": batch_snt_loss})
+            wandb.log({"val_rec_loss": batch_rec_loss})
+            wandb.log({"val_clip_loss": batch_clip_loss})
         self.beforeloss = batch_loss
 
         # sort translation
@@ -838,6 +862,9 @@ class MartTrainer(trainer_base.BaseTrainer):
             total=len(data_loader), desc=f"Validate epoch {self.state.current_epoch}"
         )
         batch_loss = 0.0
+        batch_snt_loss = 0.0
+        batch_rec_loss = 0.0
+        batch_clip_loss = 0.0
         batch_idx = 0
         for _step, batch in enumerate(data_loader):
             # ---------- forward pass ----------
@@ -865,7 +892,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                     gt_rec = [e["gt_rec"] for e in batched_data]
 
                     # ver. future
-                    loss, pred_scores_list = self.model(
+                    loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                         input_ids_list,
                         video_features_list,
                         input_masks_list,
@@ -875,6 +902,9 @@ class MartTrainer(trainer_base.BaseTrainer):
                         gt_rec
                     )
                     batch_loss += loss
+                    batch_snt_loss += snt_loss
+                    batch_rec_loss += rec_loss
+                    batch_clip_loss += clip_loss
                     batch_idx += 1
                     # translate (no ground truth text)
                     step_sizes = batch[1]  # list(int), len == bsz
@@ -934,8 +964,14 @@ class MartTrainer(trainer_base.BaseTrainer):
             pbar.update()
         pbar.close()
         batch_loss /= batch_idx
+        batch_snt_loss /= batch_idx
+        batch_rec_loss /= batch_idx
+        batch_clip_loss /= batch_idx
         if self.wandb_flag == 1:
             wandb.log({"test_loss": batch_loss})
+            wandb.log({"test_snt_loss": batch_snt_loss})
+            wandb.log({"test_rec_loss": batch_rec_loss})
+            wandb.log({"test_clip_loss": batch_clip_loss})
 
         # ---------- validation done ----------
 

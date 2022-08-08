@@ -1195,6 +1195,6 @@ class RecursiveTransformer(nn.Module):
                 fut_loss += self.future_loss(pred_fut[idx].reshape(-1, 16, 16, 3), gt_fut[idx] / 255.)
 
             # caption_loss += 0.9 * snt_loss + 1000 * rec_loss + 1 * clip_loss + iwp_loss / 100 + 1 * fut_loss
-            caption_loss += 0.9 * snt_loss + 1000 * rec_loss + 10 * clip_loss + iwp_loss / 100
+            caption_loss += 15 * snt_loss + 500 * rec_loss + 4 * clip_loss + iwp_loss / 100
         caption_loss /= step_size
-        return caption_loss, prediction_scores_list
+        return caption_loss, prediction_scores_list, snt_loss, rec_loss, clip_loss

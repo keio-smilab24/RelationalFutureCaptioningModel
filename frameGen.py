@@ -117,7 +117,7 @@ def save_frame_sec(video_path, sec, result_path):
 
 if __name__ == "__main__":
     # frame_dir = "./ponnet_data/4s_center_frames/"
-    clip_file = "./annotations/ponnet/1100sample.csv"
+    clip_file = "./annotations/BILA/1200sample.csv"
 
     with open(clip_file, 'r') as f:
         reader = csv.reader(f, delimiter=",")

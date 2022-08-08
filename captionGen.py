@@ -4,7 +4,7 @@ import os
 import csv
 
 def main_train():
-    csv_name = './annotations/ponnet/dataset_train.csv'
+    csv_name = './annotations/BILA/dataset_train.csv'
     output_file = './annotations/BILA/captioning_train.json'
     with open(csv_name, 'r') as f:
         reader = csv.reader(f, delimiter=',')
@@ -18,7 +18,7 @@ def main_train():
 
 
 def main_valid():
-    csv_name = './annotations/ponnet/dataset_valid.csv'
+    csv_name = './annotations/BILA/dataset_valid.csv'
     output_file = './annotations/BILA/captioning_val.json'
     with open(csv_name, 'r') as f:
         reader = csv.reader(f, delimiter=',')
@@ -32,7 +32,7 @@ def main_valid():
 
 
 def main_test():
-    csv_name = './annotations/ponnet/dataset_test.csv'
+    csv_name = './annotations/BILA/dataset_test.csv'
     output_file = './annotations/BILA/captioning_test.json'
     with open(csv_name, 'r') as f:
         reader = csv.reader(f, delimiter=',')
