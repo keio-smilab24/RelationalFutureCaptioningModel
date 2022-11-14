@@ -1,5 +1,6 @@
 # ---------- repo-specific
 /data/
+datasets/
 /experiments/
 /provided_embeddings*/
 /provided_models*/
