@@ -64,7 +64,8 @@ def make_dict(train_caption_file, word2idx_filepath):
 
     return max_words
 
-
+# TODO: ここを合うように書き換える
+# TODO: NEXT : modelの方を変更
 class RecursiveCaptionDataset(data.Dataset):
     PAD_TOKEN = "[PAD]"  # padding of the whole sequence, note
     CLS_TOKEN = "[CLS]"  # leading token of the joint sequence
