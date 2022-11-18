@@ -2,20 +2,21 @@ from typing import Any, Optional, Callable, Tuple, Dict
 import csv
 import json
 import os
+from pathlib import Path
 
 from tqdm import tqdm
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 
-class BillaS(Dataset):
+class BilaS(Dataset):
     """
     """
     def __init__(
         self,
         root: str,
         params: Dict[str, Any],
-        data_file: str = "billas.jsonl",
+        data_file: str = "bilas_mecab.jsonl",
         transforms: Optional[Callable] = None,
     ):
         super().__init__()
@@ -23,7 +24,10 @@ class BillaS(Dataset):
         self.data_file = data_file
         self.transforms = transforms
 
-        self.data_path = os.path.join(self.root, self.data_file)
+        self.bildata_path = Path(self.root, "BilaS")
+        self.pondata_path = Path(self.root, "Ponnet")
+
+        self.data_path = Path(self.bildata_path, self.data_file)
 
         self.images_rgb = []
         self.images_depth = []
@@ -35,17 +39,17 @@ class BillaS(Dataset):
 
         with open(self.data_path, 'r') as f:
             lines = f.read()
-            lines = lines.split('\n')
+            lines = lines.split('\n')[:-1]
             for line in lines:
-                df = json.loads(line) 
+                df = json.loads(line)
 
-                self.images_rgb.append(df['image_rgb'])
-                self.images_depth.append(df['image_depth'])
-                self.targets_rgb.append(df['target_rgb'])
-                self.targets_depth.append(df['target_depth'])
-                self.attention_maps_rgb.append(df['attention_map_rgb'])
-                self.attention_maps_depth.append(df['attention_map_depth'])
-                self.sentences.append(df['sentence'])
+                self.images_rgb.append(Path(self.pondata_path, df['image_rgb']))
+                self.images_depth.append(Path(self.pondata_path, df['image_depth']))
+                self.targets_rgb.append(Path(self.pondata_path, df['target_rgb']))
+                self.targets_depth.append(Path(self.pondata_path, df['target_depth']))
+                self.attention_maps_rgb.append(Path(self.pondata_path, df['attention_map_rgb']))
+                self.attention_maps_depth.append(Path(self.pondata_path, df['attention_map_depth']))
+                self.sentences.append(df['parse_sentence'])
 
     def __getitem__(self, index) -> Tuple[Any, Any]:
         # カメラ視点画像
@@ -80,8 +84,8 @@ def main():
         "attention_rgb": [0.5, 0.5],
         "attention_depth": [0.5, 0.5],
     }
-    datasets = BillaS(
-        root = "/home/initial/RFCM/RelationalFutureCaptioningModel/datasets/BillaS", params=params, 
+    datasets = BilaS(
+        root = "/home/initial/RFCM/RelationalFutureCaptioningModel/data/", params=params, 
     )
     dataloader = DataLoader(
         dataset=datasets,

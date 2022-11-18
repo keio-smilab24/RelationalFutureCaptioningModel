@@ -9,8 +9,8 @@ from classopt import classopt, config
 
 @classopt(default_long=True, default_short=True)
 class Args:
-    input_path: str = config(long="--input", short="-i", default="/home/taku/RFCM/RelationalFutureCaptioningModel/datasets/BillaS/billas.jsonl")
-    output_path: str = config(long="--output", short="-o", default="/home/taku/RFCM/RelationalFutureCaptioningModel/datasets/BillaS/billas_mecab.jsonl")
+    input_path: str = config(long="--input", short="-i", default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/BilaS/bilas.jsonl")
+    output_path: str = config(long="--output", short="-o", default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/BilaS/bilas_mecab.jsonl")
     delete_list: str = [".", "?", "!", "。", "？", "！"]
 
 
@@ -28,7 +28,7 @@ def main():
             m_sentence = m.parse(sentence)
             m_sentence = m_sentence.replace(' \n', '')
 
-            line['parse_setntence'] = m_sentence
+            line['parse_sentence'] = m_sentence
 
             with open(args.output_path, "a") as output:
                 json.dump(line, output, ensure_ascii=False)
