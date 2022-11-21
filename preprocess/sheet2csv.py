@@ -8,7 +8,7 @@ import pandas as pd
 
 @classopt(default_long=True)
 class Args:
-    data_dir: str = config(long="--dir", short='-d', default='/home/initial/RFCM/RelationalFutureCaptioningModel/data/BillaS/S-set4/sentences/')
+    data_dir: str = config(long="--dir", short='-d', default='/home/initial/RFCM/RelationalFutureCaptioningModel/data/BilaS/S-set4/sentences/')
     csv_path: str = config(long="--csv", short="-c", default="S-set4_all.csv")
     output_path: str = config(long="--output", short="-o", default="sentences_S-set4.csv")
 

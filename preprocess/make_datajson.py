@@ -10,9 +10,9 @@ import pandas as pd
 
 @classopt(default_long=True)
 class Args:
-    bilas_path: str = config(long="--bilas", short='-b',  default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/BillaS/")
+    bilas_path: str = config(long="--bilas", short='-b',  default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/BilaS/")
     ponnet_path: str = config(long='--ponnet', short='-p', default='/home/initial/RFCM/RelationalFutureCaptioningModel/data/Ponnet/')
-    output_path: str = config(long='--output', short='-o',  default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/BillaS/bilas.jsonl")
+    output_path: str = config(long='--output', short='-o',  default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/BilaS/bilas.jsonl")
     numSet: int = config(long='--numSet', short='-n', default=4, choices=[1,3,4])
     att_type: str = config(long='--att_type', short='-t', default='att', choices=['gray', 'att', 'over', 'ave'])
 
@@ -72,8 +72,8 @@ def main():
         if args.att_type == 'ave':
             att_rgb = att_df.iloc[scene-1, :]['att_ave']
             att_depth = att_df.iloc[scene-1, :]['att_ave']
-        
-        
+
+        billas['scene'] = str(scene)
         billas['image_rgb'] = image_rgb
         billas['image_depth'] = image_depth
         billas['target_rgb'] = target_rgb

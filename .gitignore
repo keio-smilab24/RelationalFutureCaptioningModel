@@ -17,6 +17,9 @@ data/
 /out/
 /tmp_img*/
 
+# ----- BilaS ------
+.vscode/
+
 
 # ---------- general
 
