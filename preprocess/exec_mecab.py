@@ -9,8 +9,8 @@ from classopt import classopt, config
 
 @classopt(default_long=True, default_short=True)
 class Args:
-    input_path: str = config(long="--input", short="-i", default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/BilaS/bilas.jsonl")
-    output_path: str = config(long="--output", short="-o", default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/BilaS/bilas_mecab.jsonl")
+    input_path: str = config(long="--input", short="-i", default="data/BilaS/bilas.jsonl")
+    output_path: str = config(long="--output", short="-o", default="data/BilaS/bilas_mecab.jsonl")
     delete_list: str = [".", "?", "!", "。", "？", "！"]
 
 

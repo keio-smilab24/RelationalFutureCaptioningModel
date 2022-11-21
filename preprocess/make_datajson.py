@@ -10,9 +10,9 @@ import pandas as pd
 
 @classopt(default_long=True)
 class Args:
-    bilas_path: str = config(long="--bilas", short='-b',  default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/BilaS/")
-    ponnet_path: str = config(long='--ponnet', short='-p', default='/home/initial/RFCM/RelationalFutureCaptioningModel/data/Ponnet/')
-    output_path: str = config(long='--output', short='-o',  default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/BilaS/bilas.jsonl")
+    bilas_path: str = config(long="--bilas", short='-b',  default="data/BilaS/")
+    ponnet_path: str = config(long='--ponnet', short='-p', default='data/Ponnet/')
+    output_path: str = config(long='--output', short='-o',  default="data/BilaS/bilas.jsonl")
     numSet: int = config(long='--numSet', short='-n', default=4, choices=[1,3,4])
     att_type: str = config(long='--att_type', short='-t', default='att', choices=['gray', 'att', 'over', 'ave'])
 
