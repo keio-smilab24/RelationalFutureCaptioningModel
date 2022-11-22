@@ -25,7 +25,7 @@ import torchvision.models as models
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-ACTION_WEIGHT = {111: 131, 94: 628}
+ACTION_WEIGHT = {111: 131, 94: 628} 
 
 # # default infinity (cfg.inf = 0), works with fp32. this can lead to NaN values in some circumstances
 INF = float("inf")
@@ -331,6 +331,9 @@ def make_shifted_mask(input_mask, max_v_len, max_t_len, memory_len=0, decoder=Fa
             [1., 1., 1., 1., 1.]])
     """
     bsz, seq_len = input_mask.shape
+    print('---------------------')
+    print(max_v_len)
+    print(max_t_len)
     assert max_v_len + max_t_len + memory_len == seq_len
     shifted_mask = input_mask.new_zeros(
         bsz, max_v_len + max_t_len, seq_len
@@ -975,7 +978,8 @@ class RecursiveTransformer(nn.Module):
     def __init__(self, cfg: MartConfig):
         super().__init__()
         self.cfg = cfg
-        self.cfg.vocab_size = 130
+        # TODO: vocab_sizeの変更
+        self.cfg.vocab_size = 307
         self.z_f = torch.randn(1, requires_grad=True).cuda()
         self.z_p = torch.randn(1, requires_grad=True).cuda()
         self.embeddings = EmbeddingsWithVideo(cfg, add_postion_embeddings=True)
@@ -1045,16 +1049,12 @@ class RecursiveTransformer(nn.Module):
         single step forward in the recursive structure
         """
         fut_emb_list = video_features[:, 1:8, :].clone()
-        # print("fut_emb_list", fut_emb_list.shape)
         video_features = self.size_adjust(video_features)
         self.pred_reconst = []
         self.gt_rec = []
         for idx in range(7):
-            # print("video", video_features[:, idx+1, :].shape)
-            # print("feat", self.mlp(fut_emb_list[:, idx, :]).shape)
             video_features[:, idx+1, :] = self.mlp(fut_emb_list[:, idx, :]).clone()
         fut_emb_list = video_features[:, 1:8, :].clone()
-        # print("fut_emb_list", fut_emb_list.shape)
         rec_tmp = fut_emb_list[:, 0, :].clone()
         fut_clip = fut_emb_list[:, 6, :].clone()
 
@@ -1062,8 +1062,6 @@ class RecursiveTransformer(nn.Module):
 
         # Time Series Module
         _, clip_feats = self.TSModule(clip_feats)
-
-        # print("input_ids", input_ids.shape)
 
         embeddings = self.embeddings(
             input_ids, video_features, token_type_ids
@@ -1104,10 +1102,18 @@ class RecursiveTransformer(nn.Module):
 
         Returns:
         """
-        # print("input_ids_list", input_ids_list[0].shape)
-        # [(N, M, D)] * num_hidden_layers, initialized internally
+        # print('-------------------------')
+        # print('gt_rec')
+        # print(len(gt_rec)) # 1
+        # print('-------------------------')
+
         step_size = len(input_ids_list)
-        # print("step_size: ", step_size)
+        # print('-----------------------')
+        # print('input_ids_list')
+        # print(len(input_ids_list)) # 1
+        # print(len(input_ids_list[0])) # 16
+        # print(input_ids_list)
+        # print('-----------------------')
         encoded_outputs_list = []  # [(N, L, D)] * step_size
         prediction_scores_list = []  # [(N, L, vocab_size)] * step_size
         pred_reconst = []
@@ -1116,6 +1122,7 @@ class RecursiveTransformer(nn.Module):
         gt_fut = []
         action_score = []
         fut_loss = 0
+
         if gt_rec is not None:
             for idx in range(step_size):
                 encoded_layer_outputs, prediction_scores, pred_tmp, fut_clip = self.forward_step(
@@ -1128,7 +1135,6 @@ class RecursiveTransformer(nn.Module):
                 gt_reconst.append(gt_rec[idx])
                 pred_reconst.append(pred_tmp)
                 pred_fut.append(fut_clip)
-                # print(type(encoded_layer_outputs[0]))
                 encoded_outputs_list.append(encoded_layer_outputs)
                 prediction_scores_list.append(prediction_scores)
                 action_score.append(prediction_scores[:, 7, :])
@@ -1143,8 +1149,13 @@ class RecursiveTransformer(nn.Module):
                 encoded_outputs_list.append(encoded_layer_outputs)
                 prediction_scores_list.append(prediction_scores)
                 action_score.append(prediction_scores[:, 7, :])
+        
         # compute loss, get predicted words
         caption_loss = 0.0
+        # print('-----------------')
+        # print('step size')
+        # print(step_size) # 1
+        # print('-----------------')
         for idx in range(step_size):
             snt_loss = self.loss_func(
                 prediction_scores_list[idx].view(-1, self.cfg.vocab_size),
@@ -1166,30 +1177,12 @@ class RecursiveTransformer(nn.Module):
 
             clip_loss += self.cliploss(pred_reconst[idx], encoded_outputs_list[idx][0][:, 9:, :])
             if gt_rec is not None:
-                # print("rec", pred_reconst[idx].shape)
-                # print("gt", gt_rec[idx].shape)
+                # print('--------------------')
+                # print('gt_reconst') 
+                # print(len(gt_reconst)) # 1
+                # print(len(gt_reconst[idx])) # 16
+                # print('--------------------')
                 rec_loss = self.future_loss(pred_reconst[idx].reshape(-1, 16, 16, 3), gt_reconst[idx] / 255.)
-                # for i in range(pred_reconst[idx].size()[0]):
-                #     # print("rec", pred_reconst[idx][i].shape)
-                #     # print("gt", gt_rec[idx][i].shape)
-
-                #     tmp_img = pred_reconst[idx][i].reshape(16, 16, 3)
-                #     gt_img = gt_rec[idx][i]
-                #     # tmp_img = pred_reconst[idx][i].reshape(16, 16, 3)
-                #     # gt_img = gt_rec[idx][i].reshape(16, 16, 3)
-                #     tmp_img = tmp_img.to('cpu').detach().numpy().copy()
-                #     tmp_img = np.clip(tmp_img * 255, a_min = 0, a_max = 255).astype(np.uint8)
-                #     gt_img = gt_img.to('cpu').detach().numpy().copy().astype(np.uint8)
-                #     # gt_img = np.clip(gt_img * 255, a_min = 0, a_max = 255).astype(np.uint8)
-                #     # print("tmp", tmp_img.shape)
-                #     # print(gt_img.shape)
-                #     if train:
-                #         tmp_img = cv2.resize(tmp_img, dsize=(256, 256))
-                #         gt_img = cv2.resize(gt_img, dsize=(256, 256))
-                #         cv2.imwrite(os.path.join("./tmp_img_id73", str(self.idx) + "pred.png"), tmp_img)
-                #         cv2.imwrite(os.path.join("./tmp_img_id73", str(self.idx) + "gt.png"), gt_img)
-                #     self.idx += 1
-                # self.idx = 0
 
             if gt_clip is not None and train:
                 fut_loss += self.future_loss(pred_fut[idx].reshape(-1, 16, 16, 3), gt_fut[idx] / 255.)

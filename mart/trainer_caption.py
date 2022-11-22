@@ -112,7 +112,7 @@ class MartModelManager(BaseModelManager):
         super().__init__(cfg)
         # update config type hints
         self.cfg: MartConfig = self.cfg
-        self.model_dict: [str, nn.Module] = {"model": model}
+        self.model_dict: Dict[str, nn.Module] = {"model": model}
 
 
 class MartTrainerState(BaseTrainerState):
@@ -312,7 +312,8 @@ class MartTrainer(trainer_base.BaseTrainer):
             val_loader: Validation dataloader.
         """
         while(True):
-            self.wandb_flag = int(input("Use wandb\n Yes: 1, No: 0\n"))
+            # self.wandb_flag = int(input("Use wandb\n Yes: 1, No: 0\n"))
+            self.wandb_flag = 0
             if self.wandb_flag == 1:
                 wandb_name = input("please input project name : ")
                 wandb.init(name=wandb_name, project="mart")
@@ -367,16 +368,39 @@ class MartTrainer(trainer_base.BaseTrainer):
                         )
                         for step_data in batch[0]
                     ]
+                    # batch[0][0] == batched_data[0]
+                    # dict_keys(['name', 'input_tokens', 'input_ids', 
+                    #           'input_labels', 'input_mask', 'token_type_ids', 
+                    #           'video_feature', 'gt_clip', 'gt_rec'])
 
-                    input_ids_list = [e["input_ids"] for e in batched_data]
-                    video_features_list = [e["video_feature"] for e in batched_data]
-                    input_masks_list = [e["input_mask"] for e in batched_data]
-                    token_type_ids_list = [
-                        e["token_type_ids"] for e in batched_data
-                    ]
-                    input_labels_list = [e["input_labels"] for e in batched_data]
-                    gt_clip = [e["gt_clip"] for e in batched_data]
-                    gt_rec = [e["gt_rec"] for e in batched_data]
+                    # TODO: modelへの入力はここ
+
+                    input_ids_list = [e["input_ids"] for e in batched_data] # torch.Size([16, 31])
+                    video_features_list = [e["video_feature"] for e in batched_data] # torch.Size([16, 31, 150528])
+                    input_masks_list = [e["input_mask"] for e in batched_data] # torch.Size([16, 31])
+                    token_type_ids_list = [e["token_type_ids"] for e in batched_data] # # torch.Size([16, 31])
+                    input_labels_list = [e["input_labels"] for e in batched_data] # # torch.Size([16, 31])
+                    gt_clip = [e["gt_clip"] for e in batched_data] # torch.Size([16, 16, 16, 3])
+                    gt_rec = [e["gt_rec"] for e in batched_data] # torch.Size([16, 16, 16, 3])
+                    
+                    # print('----------------------------')
+                    # print(len(input_ids_list))
+                    # print(input_ids_list[0].shape)
+                    # print(len(video_features_list))
+                    # print(video_features_list[0].shape)
+                    # print(len(input_masks_list))
+                    # print(input_masks_list[0].shape)
+                    # print(len(token_type_ids_list))
+                    # print(token_type_ids_list[0].shape)
+                    # print(len(input_labels_list))
+                    # print(input_labels_list[0].shape)
+                    # print(len(gt_clip))
+                    # print(gt_clip[0].shape)
+                    # print(len(gt_rec))
+                    # print(gt_rec[0].shape)
+                    # print('------------------------------')
+
+
                     if self.cfg.debug:
                         cur_data = batched_data[step]
                         self.logger.info(
