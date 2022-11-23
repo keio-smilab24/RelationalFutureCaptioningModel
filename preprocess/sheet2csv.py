@@ -11,6 +11,7 @@ class Args:
     csv_path: str = config(long="--csv", short="-c", default="S-set4_all.csv")
     output_path: str = config(long="--output", short="-o", default="sentences_S-set4.csv")
     delete_two_text: bool = config(long='--delete', short='-del', default=False)
+    verNum: int = config(long='--ver', short='-v', default=1, choices=[1,2])
 
 def delete_two_sentence(text):
     """
@@ -19,7 +20,7 @@ def delete_two_sentence(text):
     """
     text = str(text)
     if re.search(r'。また、', text):
-        text = re.sub(r"。また、*", r"", text)
+        text = re.sub(r"。また、.*", r"", text)
 
     return text
 
@@ -32,10 +33,15 @@ def main():
     df_is_col = df[df["isColl"] == 1]
     print(type(df_is_col))
     
+    Ver = f'SentenceVer{args.verNum}'
+
     if args.delete_two_text:
-        df_is_col["SentenceVer1"] = df_is_col["SentenceVer1"].map(delete_two_sentence)
+        df_is_col[Ver] = df_is_col[Ver].map(delete_two_sentence)
     
-    df_is_col = df_is_col[["Scene", "SentenceVer1"]]
+    df_is_col = df_is_col[["Scene", Ver]]
+
+    columns = ['Scene', 'Sentence']
+    df_is_col.columns = columns
 
     df_is_col.to_csv(args.data_dir+args.output_path, index=False)
 

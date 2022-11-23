@@ -9,9 +9,9 @@ from classopt import classopt, config
 
 @classopt(default_long=True)
 class Args:
-    root: str = config(long='--root', short='-r', default='/home/initial/RFCM/RelationalFutureCaptioningModel/data/Ponnet/S-set4/')
-    json_path: str = config(long='--json_path', short='-jp', default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/Ponnet/S-set4/att_path.jsonl")
-    csv_path: str = config(long='--csv_path', short='-cp', default="/home/initial/RFCM/RelationalFutureCaptioningModel/data/Ponnet/S-set4/att_path.csv")
+    root: str = config(long='--root', short='-r', default='data/Ponnet/S-set3/')
+    json_path: str = config(long='--json_path', short='-jp', default="data/Ponnet/S-set3/att_path.jsonl")
+    csv_path: str = config(long='--csv_path', short='-cp', default="data/Ponnet/S-set3/att_path.csv")
     imageNum: int = 2000
     make_json: bool = config(short='--json', default=False)
     make_csv: bool = config(short='--csv', default=False)

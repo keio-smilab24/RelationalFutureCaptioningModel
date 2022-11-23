@@ -47,7 +47,7 @@ def main():
     att_df.columns = columns
 
     for i in tqdm(range(H)):
-        scene, sentence = sentence_df['Scene'][i], sentence_df['SentenceVer1'][i]
+        scene, sentence = sentence_df['Scene'][i], sentence_df['Sentence'][i]
         if sentence is NaN:
             continue
 
