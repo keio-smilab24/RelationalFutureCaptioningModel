@@ -32,33 +32,55 @@ def get_sen_stat(list_of_str):
     tokenized = [nltk.tokenize.word_tokenize(sen.lower()) for sen in list_of_str]
     num_sen = len(list_of_str)
     lengths = [len(e) for e in tokenized]
-    avg_len = 1.0 * sum(lengths) / len(lengths)
+    # TODO : ここ必要か確認しておく
+    if len(lengths) != 0:
+        avg_len = 1.0 * sum(lengths) / len(lengths)
+    else:
+        avg_len = 1.0 * sum(lengths)
     full_vocab = set([item for sublist in tokenized for item in sublist])
     return {"vocab_size": len(full_vocab), "avg_sen_len": avg_len, "num_sen": num_sen}
 
-
+# TODO : bilas / bila
 def evaluate_stats_files(
     submission_file: str,
     reference_file: str,
     output_file: Optional[Union[str, Path]] = None,
     verbose: bool = False,
+    datatype = "bilas",
 ) -> Dict[str, Any]:
     """
     Get vocab size, average length, etc
+    
+    bila
+        submission_file: experiments/.../caption/translations_0_test.json
+        ref_file: annotations/BILA/captioning_test_para.json
+    bilas
+        submisiion_file: experiments/...caption/translations_0_val.json
+        ref_file : data/BilaS/caption_valid.json
     """
     # load data
     sub_data = json.load(open(submission_file, "r"))
     ref_data = json.load(open(reference_file, "r"))
+    # print('------------ sub-data ---------')
+    # print(sub_data)
+    # print('--------- ref data ---------------')
+    # print(ref_data)
+    # print('--------- bf ------------------')
     sub_data = sub_data["results"] if "results" in sub_data else sub_data
     ref_data = ref_data["results"] if "results" in ref_data else ref_data
-    sub_data = {k: v for k, v in list(sub_data.items()) if k in ref_data}
-    # tmp_data = {}
-    # for _subdata in sub_data.values():
-    #     for data in _subdata:
-    #         if data["clip_id"] in ref_data:
-    #             tmp_data[data["clip_id"]] = {"sentence": data["sentence"], "gt_sentence": data["gt_sentence"]}
+    # print('##### sub_data.items() ######')
+    # print(sub_data.items())
+    # print('-------------------------------------')
+    # print(list(sub_data.items())[0])
+    # print('----------------- ##### --------------')
+    if datatype == "bila":
+        sub_data = {k: v for k, v in list(sub_data.items()) if k in ref_data}
+    elif datatype == 'bilas':
+        sub_data = {k: v for k, v in list(sub_data.items()) if str(int(k)) in ref_data}
 
-    # sub_data = tmp_data
+    # print('------- sub_data --------')
+    # print(sub_data)
+    # print('--------------------------')
 
     submission_data_entries = [
         item for sublist in list(sub_data.values()) for item in sublist
@@ -66,6 +88,11 @@ def evaluate_stats_files(
     # print(submission_data_entries)
 
     submission_sentences = [e["sentence"] for e in submission_data_entries]
+    # print('------- submission data entries-------')
+    # print(submission_data_entries)
+    # print('------- submission sentences -------')
+    # print(submission_sentences)
+    # print('---------------------------------')
     submission_stat = get_sen_stat(submission_sentences)
 
     if verbose:
@@ -80,6 +107,9 @@ def evaluate_stats_files(
 
     if output_file is not None:
         with open(output_file, "w", encoding="utf8") as f:
-            f.write(json.dumps(final_res, indent=4, sort_keys=True))
-
+            if datatype == "bila":
+                f.write(json.dumps(final_res, indent=4, sort_keys=True))
+            elif datatype == "bilas":
+                f.write(json.dumps(final_res, indent=4, sort_keys=True, ensure_ascii=False))
+    
     return final_res

@@ -20,7 +20,7 @@ from torch.cuda.amp import autocast
 from torch.utils import data
 from tqdm import tqdm
 
-from coot.configs_retrieval import ExperimentTypesConst
+from coot.configs_retrieval import DataTypesConst, ExperimentTypesConst
 from mart.caption_eval_tools import get_reference_files
 from mart.configs_mart import MartConfig, MartMetersConst as MMeters
 from mart.evaluate_language import evaluate_language_files
@@ -302,7 +302,11 @@ class MartTrainer(trainer_base.BaseTrainer):
         self.wandb_flag = 0
 
     def train_model(
-        self, train_loader: data.DataLoader, val_loader: data.DataLoader, test_loader
+        self,
+        train_loader: data.DataLoader,
+        val_loader: data.DataLoader,
+        test_loader: data.DataLoader,
+        datatype: str = "bila",
     ) -> None:
         """
         Train epochs until done.
@@ -313,6 +317,7 @@ class MartTrainer(trainer_base.BaseTrainer):
         """
         while(True):
             # self.wandb_flag = int(input("Use wandb\n Yes: 1, No: 0\n"))
+            # TODO : wandb
             self.wandb_flag = 0
             if self.wandb_flag == 1:
                 wandb_name = input("please input project name : ")
@@ -327,8 +332,6 @@ class MartTrainer(trainer_base.BaseTrainer):
 
         # ---------- Epoch Loop ----------
         for _epoch in tqdm(range(self.state.current_epoch, self.cfg.train.num_epochs)):
-            # if self.check_early_stop():
-            #     break
             self.hook_pre_train_epoch()  # pre-epoch hook: set models to train, time book-keeping
 
             # check exponential moving average
@@ -373,8 +376,6 @@ class MartTrainer(trainer_base.BaseTrainer):
                     #           'input_labels', 'input_mask', 'token_type_ids', 
                     #           'video_feature', 'gt_clip', 'gt_rec'])
 
-                    # TODO: modelへの入力はここ
-
                     input_ids_list = [e["input_ids"] for e in batched_data] # torch.Size([16, 31])
                     video_features_list = [e["video_feature"] for e in batched_data] # torch.Size([16, 31, 150528])
                     input_masks_list = [e["input_mask"] for e in batched_data] # torch.Size([16, 31])
@@ -382,23 +383,6 @@ class MartTrainer(trainer_base.BaseTrainer):
                     input_labels_list = [e["input_labels"] for e in batched_data] # # torch.Size([16, 31])
                     gt_clip = [e["gt_clip"] for e in batched_data] # torch.Size([16, 16, 16, 3])
                     gt_rec = [e["gt_rec"] for e in batched_data] # torch.Size([16, 16, 16, 3])
-                    
-                    # print('----------------------------')
-                    # print(len(input_ids_list))
-                    # print(input_ids_list[0].shape)
-                    # print(len(video_features_list))
-                    # print(video_features_list[0].shape)
-                    # print(len(input_masks_list))
-                    # print(input_masks_list[0].shape)
-                    # print(len(token_type_ids_list))
-                    # print(token_type_ids_list[0].shape)
-                    # print(len(input_labels_list))
-                    # print(input_labels_list[0].shape)
-                    # print(len(gt_clip))
-                    # print(gt_clip[0].shape)
-                    # print(len(gt_rec))
-                    # print(gt_rec[0].shape)
-                    # print('------------------------------')
 
 
                     if self.cfg.debug:
@@ -523,7 +507,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                 # if is_best:
                 print("#############################################")
                 print("Do test")
-                self.test_epoch(test_loader)
+                self.test_epoch(test_loader, datatype=datatype)
                 print("###################################################")
 
             # save the EMA weights
@@ -544,8 +528,10 @@ class MartTrainer(trainer_base.BaseTrainer):
 
 
     @th.no_grad()
+    # TODO : bilas / bila
     def validate_epoch(
-        self, data_loader: data.DataLoader
+        self, data_loader: data.DataLoader, 
+        datatype: str="bilas"
     ) -> (Tuple[float, float, bool, Dict[str, float]]):
         """
         Run both validation and translation.
@@ -656,7 +642,6 @@ class MartTrainer(trainer_base.BaseTrainer):
                     for example_idx, (step_size, cur_meta) in enumerate(
                         zip(step_sizes, meta)
                     ):
-                        # print(cur_meta)
                         # example_idx indicates which example is in the batch
                         for step_idx, step_batch in enumerate(dec_seq_list[:step_size]):
                             # step_idx or we can also call it sen_idx
@@ -671,10 +656,6 @@ class MartTrainer(trainer_base.BaseTrainer):
                                     "clip_id": cur_meta["clip_id"]
                                 }
                             )
-                    # if self.cfg.debug:
-                    #     print(
-                    #         f"Vid feat {[v.mean().item() for v in video_features_list]}"
-                    #     )
 
                 # keep logs
                 n_correct = 0
@@ -722,18 +703,29 @@ class MartTrainer(trainer_base.BaseTrainer):
         file_translation_raw = self.exp.get_translation_files(
             self.state.current_epoch, eval_mode
         )
-        json.dump(batch_res, file_translation_raw.open("wt", encoding="utf8"))
+        if datatype == 'bila':
+            json.dump(batch_res, file_translation_raw.open("wt", encoding="utf8"))
+        elif datatype == 'bilas':
+            json.dump(batch_res, file_translation_raw.open("wt", encoding="utf8"), ensure_ascii=False)
 
         # get reference files (ground truth captions)
         reference_files_map = get_reference_files(
-            self.cfg.dataset_val.name, self.exp.annotations_dir
+            self.cfg.dataset_val.name, self.exp.annotations_dir, datatype=datatype,
         )
         reference_files = reference_files_map[eval_mode]
         reference_file_single = reference_files[0]
 
         # language evaluation
+        """
+        bila:
+            file_translation_raw ; experiments/caption/default/ponnet_100m_coot_clip_mart_run2022-11-23 02:17:37.086785/caption/translations_0_val.json
+            reference_file: annotations/BILA/captioning_val_para.json'
+        bilas
+            file_translation_raw: 同上
+            reference_file: bila_valid(test)_mecab.jsonl
+        """
         res_lang = evaluate_language_files(
-            file_translation_raw, reference_files, verbose=False, all_scorer=True
+            file_translation_raw, reference_files, verbose=False, all_scorer=True, datatype=datatype
         )
         # basic stats
         res_stats = evaluate_stats_files(
@@ -741,7 +733,7 @@ class MartTrainer(trainer_base.BaseTrainer):
         )
         # repetition
         res_rep = evaluate_repetition_files(
-            file_translation_raw, reference_file_single, verbose=False
+            file_translation_raw, reference_file_single, verbose=False, datatype=datatype,
         )
 
         # merge results
@@ -840,7 +832,9 @@ class MartTrainer(trainer_base.BaseTrainer):
 
     @th.no_grad()
     def test_epoch(
-        self, data_loader: data.DataLoader
+        self,
+        data_loader: data.DataLoader,
+        datatype: str = 'bila',
     ) -> (Tuple[float, float, bool, Dict[str, float]]):
         """
         Run both validation and translation.
@@ -1003,22 +997,46 @@ class MartTrainer(trainer_base.BaseTrainer):
         batch_res["results"] = self.translator.sort_res(batch_res["results"])
 
         # write translation results of this epoch to file
-        eval_mode = "test"  # which dataset split
+        eval_mode = "test"
         file_translation_raw = self.exp.get_translation_files(
             self.state.current_epoch, "test"
         )
-        json.dump(batch_res, file_translation_raw.open("wt", encoding="utf8"))
-
+        if datatype == "bila":
+            json.dump(batch_res, file_translation_raw.open("wt", encoding="utf8"))    
+        elif datatype == 'bilas':
+            json.dump(batch_res, file_translation_raw.open("wt", encoding="utf8"), ensure_ascii=False)
+        
+        """
+        評価指標の計算の元のファイル
+        ここが多分bilaのまま
+        
+        reference_files_map : {'test': [PosixPath('annotations/BILA/captioning_test_para.json')]}
+        self.cfg.dataset_val.name : BILA
+        self.exp.annotations_dir : annotations
+        eval_mode : test
+        reference_files: annotations/BILA/captioning_test_para.json
+        reference_file_single: annotations/BILA/captioning_test_para.json
+        
+        """
         # get reference files (ground truth captions)
         reference_files_map = get_reference_files(
-            self.cfg.dataset_val.name, self.exp.annotations_dir, test=True
+            self.cfg.dataset_val.name, self.exp.annotations_dir, test=True, datatype=datatype,
         )
         reference_files = reference_files_map[eval_mode]
         reference_file_single = reference_files[0]
 
         # language evaluation
+        """
+        ここで評価指標を計算しているっぽい
+        bila:
+            file_translation_raw : experiments/....//caption/translations_0_test.json
+            reference_files : ['data/BilaS/caption_test.json']
+        bilas:
+            file_translation_raw : experiments/....//caption/translations_0_test.json
+            reference_files : ['data/BilaS/caption_test.json']
+        """
         res_lang = evaluate_language_files(
-            file_translation_raw, reference_files, verbose=False, all_scorer=True
+            file_translation_raw, reference_files, verbose=False, all_scorer=True, datatype=datatype
         )
         # basic stats
         res_stats = evaluate_stats_files(
@@ -1026,7 +1044,7 @@ class MartTrainer(trainer_base.BaseTrainer):
         )
         # repetition
         res_rep = evaluate_repetition_files(
-            file_translation_raw, reference_file_single, verbose=False
+            file_translation_raw, reference_file_single, verbose=False, datatype=datatype,
         )
 
         # merge results

@@ -144,12 +144,13 @@ def evaluate_repetition(data_predicted, data_gt, verbose=False):
     )
     return repetition_scores
 
-
+# TODO : bilas bila
 def evaluate_repetition_files(
     submission_file: str,
     reference_file: str,
     output_file: Optional[Union[str, Path]] = None,
     verbose: bool = False,
+    datatype: str = "bilas",
 ):
     # load input data
     sub_data = json.load(open(submission_file, "r"))
@@ -161,7 +162,10 @@ def evaluate_repetition_files(
     rep_scores = evaluate_repetition(sub_data, ref_data)
 
     # convert result to json
-    rep_scores_str = json.dumps(rep_scores, indent=4, sort_keys=True)
+    if datatype == "bila":
+        rep_scores_str = json.dumps(rep_scores, indent=4, sort_keys=True)
+    elif datatype == "bilas":
+        rep_scores_str = json.dumps(rep_scores, indent=4, sort_keys=True, ensure_ascii=False)
 
     # print output
     if verbose:
@@ -170,6 +174,9 @@ def evaluate_repetition_files(
     # save output to file
     if output_file is not None:
         with open(output_file, "w", encoding="utf8") as f:
-            f.write(json.dumps(rep_scores, indent=4, sort_keys=True))
+            if datatype == "bila":
+                f.write(json.dumps(rep_scores, indent=4, sort_keys=True))
+            elif datatype == "bilas":
+                f.write(json.dumps(rep_scores, indent=4, sort_keys=True, ensure_ascii=False))
 
     return rep_scores

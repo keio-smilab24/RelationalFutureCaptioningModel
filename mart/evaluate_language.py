@@ -29,18 +29,22 @@ from pycocoevalcap.meteor.meteor import Meteor
 from pycocoevalcap.rouge.rouge import Rouge
 from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
 
+def parse_sent(sent, datatype: str='bila'):
+    if datatype == 'bila':
+        res = re.sub("[^a-zA-Z]", " ", sent)
+        res = res.strip().lower().split()
+        return res
+    elif datatype == 'bilas': 
+        return sent
 
-def parse_sent(sent):
-    res = re.sub("[^a-zA-Z]", " ", sent)
-    res = res.strip().lower().split()
-    return res
 
-
-def parse_para(para):
-    para = para.replace("..", ".")
-    para = para.replace(".", " endofsent")
-    return parse_sent(para)
-
+def parse_para(para, datatype: str='bila'):
+    if datatype == "bila":
+        para = para.replace("..", ".")
+        para = para.replace(".", " endofsent")
+        return parse_sent(para, datatype=datatype)
+    elif datatype == 'bilas':
+        return parse_sent(para, datatype=datatype)
 
 class CaptionEvaluator:
     """
@@ -55,13 +59,19 @@ class CaptionEvaluator:
         prediction_filename,
         verbose=False,
         all_scorer=False,
+        datatype: str = 'bila',
     ):
         # Check that the gt and submission files exist and load them
         self.verbose = verbose
         self.all_scorer = all_scorer
         self.ground_truths = self.import_ground_truths(ground_truth_filenames)
-        self.prediction = self.import_prediction(prediction_filename)
+        self.prediction = self.import_prediction(prediction_filename, datatype)
         self.tokenizer = PTBTokenizer()
+        self.datatype = datatype
+
+        # print('----- self.prediction -----')
+        # print(self.prediction)
+        # print('----- self.prediction -----')
 
         # Set up scorers, if not verbose, we only use the one we're
         # testing on: METEOR
@@ -89,14 +99,26 @@ class CaptionEvaluator:
         self.n_ref_vids = set()
         self.scores = {}
 
-    def ensure_caption_key(self, data):
+    def ensure_caption_key(self, data, datatype: str='bila'):
         if len(data) == 0:
             return data
-        if not list(data.keys())[0].startswith("v_"):
-            data = {"v_" + k: data[k] for k in data}
+        if datatype == 'bila':
+            if not list(data.keys())[0].startswith("v_"):
+                data = {"v_" + k: data[k] for k in data}
+        elif datatype == 'bilas':
+            if not list(data.keys())[0].startswith("v_"):
+                data = {"v_" + str(int(k)): data[k] for k in data}
+        # print('---------- data -------------')
+        # print(data)
+        # # data : 'v_1005': 'robot robot robot robot robot robot robot robot robot robot robot robot robot because robot. ', 'v_1020': 'robot robot robot robot robot robot robot robot robot robot robot robot robot. '
+        # # data : {'v_107': 'アーム に 激しく 衝突 し て 醤油 瓶 が 倒れる 掴ん で いる ケチャップ の 容器 が 複数 の 物体 に 激しく 衝突 する', 'v_108': 
+        # print('-----------------------------')
         return data
 
-    def import_prediction(self, prediction_filename):
+    def import_prediction(self, prediction_filename, datatype='bila',):
+        """
+        experiments/caption/default/ponnet_100m_coot_clip_mart_run2022-11-23 02:23:02.249346/caption/translations_0_val.json
+        """
         if self.verbose:
             print(("| Loading submission... {}".format(prediction_filename)))
         submission = json.load(open(prediction_filename))["results"]
@@ -110,13 +132,32 @@ class CaptionEvaluator:
         for para in list(para_submission.values()):
             assert type(para) == str or type(para) == str
         # Ensure that every video is limited to the correct maximum number of proposals.
-        return self.ensure_caption_key(para_submission)
+        # print('-------------- para sub -------------')
+        # print(para_submission)
+        # # para_submission : {'1066': 'robot tried to put the robot tried to put a to put a. ', '1098':...
+        # # {'0107': 'し し し が し し し し し し し し し. ', '0108': 
+        # print('---------------------------------')
+        return self.ensure_caption_key(para_submission, datatype)
 
     def import_ground_truths(self, filenames):
+        """
+        bila
+        bilas
+            filenames: ['data/BilaS/caption_valid.json']
+        """
+        # print('--------- gt import -----------')
+        # print(filenames)
+        # # [PosixPath('annotations/BILA/captioning_val_para.json')]
+        # # ['data/BilaS/caption_valid.json']
+        # print('--------------------')
         gts = []
         self.n_ref_vids = set()
         for filename in filenames:
             gt = json.load(open(filename))
+            # print('--------- gt -----------')
+            # print(gt)
+            # # {'107': 'アーム に 激しく 衝突 し て 醤油 瓶 が 倒れる 掴ん で いる ケチャップ の 容器 が 複数 の 物体 に 激しく 衝突 する', '108': 
+            # print('-------------------------')
             self.n_ref_vids.update(list(gt.keys()))
             gts.append(self.ensure_caption_key(gt))
         if self.verbose:
@@ -126,6 +167,11 @@ class CaptionEvaluator:
                     % (len(filenames), len(self.n_ref_vids))
                 )
             )
+        # print('--------- improt gts -----------')
+        # print(gts)
+        # # [{'v_1066': 'robot pushes the green can away because robot tried to put the blue box where it is', 'v_1098': 
+        # # [{'v_107': 'アーム に 激しく 衝突 し て 醤油 瓶 が 倒れる 掴ん で いる ケチャップ の 容器 が 複数 の 物体 に 激しく 衝突 する', 'v_108': 
+        # print('--------- improt gts -----------')
         return gts
 
     def check_gt_exists(self, vid_id):
@@ -136,14 +182,20 @@ class CaptionEvaluator:
 
     def get_gt_vid_ids(self):
         vid_ids = set([])
+        # print('--- SSS ----')
+        # print(self.ground_truths)
+        # print('---- sss ------')
         for gt in self.ground_truths:
             vid_ids |= set(gt.keys())
+        # print('----- AAA -----')
+        # print(vid_ids)
+        # print('----- aaa -----')
         return list(vid_ids)
 
-    def evaluate(self):
-        self.scores = self.evaluate_para()
+    def evaluate(self, datatype:str="bila"):
+        self.scores = self.evaluate_para(datatype=datatype)
 
-    def evaluate_para(self):
+    def evaluate_para(self, datatype="bila"):
         # This method averages the tIoU precision from METEOR, Bleu, etc. across videos
         gt_vid_ids = self.get_gt_vid_ids()
         vid2idx = {k: i for i, k in enumerate(gt_vid_ids)}
@@ -152,25 +204,45 @@ class CaptionEvaluator:
             for k in gt_vid_ids:
                 if k not in gt:
                     continue
-                gts[vid2idx[k]].append(" ".join(parse_sent(gt[k])))
+                gts[vid2idx[k]].append(" ".join(parse_sent(gt[k], datatype=datatype)))
+        """
+        gt_vid_ids : ['v_36', 'v_72', 'v_99', ,,, 'v_52', 'v_9']
+        self.predietions: ['v_0001', 'v_0005', ... 'v_0106']
+
+        """
         res = {
-            vid2idx[k]: [" ".join(parse_sent(self.prediction[k]))]
+            vid2idx[k]: [" ".join(parse_sent(self.prediction[k], datatype=datatype))]
             if k in self.prediction and len(self.prediction[k]) > 0
             else [""]
             for k in gt_vid_ids
         }
         para_res = {
-            vid2idx[k]: [" ".join(parse_para(self.prediction[k]))]
+            vid2idx[k]: [" ".join(parse_para(self.prediction[k], datatype=datatype))]
             if k in self.prediction and len(self.prediction[k]) > 0
             else [""]
             for k in gt_vid_ids
         }
+        # print(datatype)
+        # print('---------------gts res --------------')
+        # print(gts)
+        # # {0: ['robot rubs the arm on the yellow toy because there was it in the robot s orbit'], 1: 
+        # print('---------------gts res --------------')
+        # print(res)
+        # # 13: [''], 14: ['robot tried to put the the the the the because robot tried to put the'], 
+        # print('---------------res gts --------------')
 
         # Each scorer will compute across all videos and take average score
         output = {}
         num = len(res)
         hard_samples = {}
         easy_samples = {}
+        """
+        self.scores : 
+        [(<mart.evaluate_language.Bleu object at 0x7fa9505bd130>, ['Bleu_1', 'Bleu_2', 'Bleu_3', 'Bleu_4']), 
+        (<pycocoevalcap.meteor.meteor.Meteor object at 0x7fa9505bdd30>, 'METEOR'), 
+        (<pycocoevalcap.rouge.rouge.Rouge object at 0x7fa9505bd040>, 'ROUGE_L'), 
+        (<pycocoevalcap.cider.cider.Cider object at 0x7fa9505bd280>, 'CIDEr')]
+        """
         for scorer, method in self.scorers:
             if scorer is None:
                 print(
@@ -241,15 +313,20 @@ def evaluate_language_files(
     output_file: Optional[Union[str, Path]] = None,
     verbose=False,
     all_scorer=True,
+    datatype: str = "bila",
 ):
-    # print(f"Refs {references_files} sub {submission_file}")
+    """
+    references_files : ['data/BilaS/caption_valid.json']
+    submission_file : caption/translations_0_val.json
+    """
     evaluator = CaptionEvaluator(
         ground_truth_filenames=references_files,
         prediction_filename=submission_file,
         verbose=verbose,
         all_scorer=all_scorer,
+        datatype = datatype,
     )
-    evaluator.evaluate()
+    evaluator.evaluate(datatype=datatype)
     scores = evaluator.scores
     if output_file is not None:
         with Path(output_file).open("wt", encoding="utf8") as fh:

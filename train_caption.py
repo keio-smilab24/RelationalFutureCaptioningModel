@@ -23,7 +23,7 @@ EXP_TYPE = ExperimentTypesConst.CAPTION
 
 
 def main():
-    # ---------- Setup script arguments. ----------
+    # setup
     parser = utils.ArgParser(description=__doc__)
     arguments.add_default_args(parser)  # logging level etc.
     arguments.add_exp_identifier_args(parser)  # arguments to identify the experiment to run
@@ -32,6 +32,7 @@ def main():
     arguments_mart.add_mart_args(parser)  # some more paths for mart
     parser.add_argument("--load_model", type=str, default=None, help="Load model from file.")
     parser.add_argument("--print_model", action="store_true", help=f"Print model")
+    parser.add_argument('--datatype', type=str, default="bila", choices=['bila', 'bilas'])
     args = parser.parse_args()
 
     # load repository config yaml file to dict
@@ -53,21 +54,19 @@ def main():
         cfg.random_seed = np.random.randint(0, 2 ** 15, dtype=np.int32)
         verb = "Randomly generated seed"
     print(f"{verb} {cfg.random_seed} deterministic {cfg.cudnn_deterministic} "
-          f"benchmark {cfg.cudnn_benchmark}")
+            f"benchmark {cfg.cudnn_benchmark}")
     set_seed(cfg.random_seed, cudnn_deterministic=cfg.cudnn_deterministic, cudnn_benchmark=cfg.cudnn_benchmark)
 
     # create dataset
     train_set, val_set, train_loader, val_loader, test_set, test_loader = create_mart_datasets_and_loaders(
-        cfg, args.coot_feat_dir, args.annotations_dir, args.video_feature_dir)
+        cfg, args.coot_feat_dir, args.annotations_dir, args.video_feature_dir, datatype=args.datatype)
 
     for i in range(args.start_run):
         run_number = datetime.datetime.now()
         run_name = f"{args.run_name}{run_number}"
 
-        # create model from config
         model = create_mart_model(cfg, len(train_set.word2idx), cache_dir=args.cache_dir)
 
-        # print model for debug if requested
         if args.print_model and i == 0:
             print(model)
 
@@ -82,18 +81,13 @@ def main():
             annotations_dir=args.annotations_dir)
 
         if args.validate:
-            # run validation
             if not trainer.load and not args.ignore_untrained:
                 raise ValueError("Validating an untrained model! No checkpoints were loaded. Add --ignore_untrained "
-                                 "to ignore this error.")
-            trainer.validate_epoch(val_loader)
+                                    "to ignore this error.")
+            trainer.validate_epoch(val_loader, datatype=args.datatype)
         else:
-            # run training
-            trainer.train_model(train_loader, val_loader, test_loader)
+            trainer.train_model(train_loader, val_loader, test_loader, datatype=args.datatype)
 
-
-            # trainer.validate_epoch(test_loader, test=True)
-        # done with this round
         trainer.close()
         del model
         del trainer

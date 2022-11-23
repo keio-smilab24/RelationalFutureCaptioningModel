@@ -95,8 +95,6 @@ def make_dict(train_caption_file, word2idx_filepath, datatype: str="bila"):
 
     return max_words
 
-# TODO: ここを合うように書き換える
-# TODO: NEXT : modelの方を変更
 class RecursiveCaptionDataset(data.Dataset):
     PAD_TOKEN = "[PAD]"  # padding of the whole sequence, note
     CLS_TOKEN = "[CLS]"  # leading token of the joint sequence
@@ -118,6 +116,7 @@ class RecursiveCaptionDataset(data.Dataset):
     recurrent: if True, return recurrent data
     """
 
+    # TODO : bilas / bila
     def __init__(
         self,
         dset_name: str,
@@ -138,7 +137,6 @@ class RecursiveCaptionDataset(data.Dataset):
         preload: bool = False,
         datatype: str = "bilas",
     ):
-        # TODO: temp
         self.datatype = datatype
 
         # metadata settings
@@ -181,6 +179,7 @@ class RecursiveCaptionDataset(data.Dataset):
 
         # determine metadata file
         tmp_path = "BILA"
+        self.mode_bilas = "val"
         if mode == "train":  # 1333 videos
             if datatype == "bila":
                 data_path = self.annotations_dir / tmp_path / "captioning_train.json" # annotations/BILA/captioning_train.json
@@ -190,14 +189,15 @@ class RecursiveCaptionDataset(data.Dataset):
             if datatype == "bila":
                 data_path = self.annotations_dir / tmp_path / "captioning_val.json" # annotations/BILA/captioning_train.json
             elif datatype == 'bilas':
-                data_path = self.annotations_dir / 'bilas_mecab.jsonl'
+                data_path = self.annotations_dir / 'bilas_valid_mecab.jsonl'
         elif mode == "test":  # 457 videos
             if datatype == "bila":
                 data_path = self.annotations_dir / tmp_path / "captioning_test.json" # annotations/BILA/captioning_train.json
             elif datatype == 'bilas':
-                data_path = self.annotations_dir / 'bilas_mecab.jsonl'
+                data_path = self.annotations_dir / 'bilas_test_mecab.jsonl'
             mode = "val"
             self.mode = "val"
+            self.mode_bilas = "test"
         else:
             raise ValueError(
                 f"Mode must be [train, val] for {self.dset_name}, got {mode}"
@@ -329,9 +329,18 @@ class RecursiveCaptionDataset(data.Dataset):
             """
             img_list = []
 
-            datapath = 'data/BilaS/bilas_mecab.jsonl'
+            if self.mode == "train":
+                datapath = 'data/BilaS/bilas_mecab.jsonl'
+            elif self.mode == "val":
+                datapath = 'data/BilaS/bilas_valid_mecab.jsonl'
+            if self.mode_bilas == 'test':
+                datapath = 'data/BilaS/bilas_test_mecab.jsonl'
+
             df = pd.read_json(datapath, orient='records', lines=True)
             df_scene = df[df['scene']==int(raw_name)]
+
+            if self.mode == "test":
+                print('---------- test -------------')
             
             ponnet_path = Path('data/Ponnet')
             image_rgb = str(Path(ponnet_path, df_scene['image_rgb'].iloc[-1]))
@@ -646,6 +655,7 @@ def create_mart_datasets_and_loaders(
     coot_feat_dir: str = MartPathConst.COOT_FEAT_DIR,
     annotations_dir: str = MartPathConst.ANNOTATIONS_DIR,
     video_feature_dir: str = MartPathConst.VIDEO_FEATURE_DIR,
+    datatype: str = 'bila',
 ) -> Tuple[
     RecursiveCaptionDataset, RecursiveCaptionDataset, data.DataLoader, data.DataLoader
 ]:
@@ -668,6 +678,7 @@ def create_mart_datasets_and_loaders(
         coot_feat_dir=coot_feat_dir,
         dataset_max=cfg.dataset_train.max_datapoints,
         preload=cfg.dataset_train.preload,
+        datatype=datatype,
     )
     # add 10 at max_n_sen to make the inference stage use all the segments
     # max_n_sen_val = cfg.max_n_sen + 10
@@ -689,6 +700,7 @@ def create_mart_datasets_and_loaders(
         coot_feat_dir=coot_feat_dir,
         dataset_max=cfg.dataset_val.max_datapoints,
         preload=cfg.dataset_val.preload,
+        datatype=datatype,
     )
 
     train_loader = data.DataLoader(
@@ -724,6 +736,7 @@ def create_mart_datasets_and_loaders(
         coot_feat_dir=coot_feat_dir,
         dataset_max=cfg.dataset_val.max_datapoints,
         preload=cfg.dataset_val.preload,
+        datatype=datatype,
     )
     test_loader = data.DataLoader(
         test_dataset,

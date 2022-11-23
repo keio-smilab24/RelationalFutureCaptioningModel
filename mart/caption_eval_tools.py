@@ -9,7 +9,10 @@ from nntrainer.utils import TrainerPathConst
 
 
 def get_reference_files(
-    dset_name: str, annotations_dir: Union[str, Path] = TrainerPathConst.DIR_ANNOTATIONS, test=False
+    dset_name: str,
+    annotations_dir: Union[str, Path] = TrainerPathConst.DIR_ANNOTATIONS,
+    test: bool = False,
+    datatype: str = 'bila',
 ) -> Dict[str, List[Path]]:
     """
     Given dataset name, load the ground truth annotations for captioning.
@@ -40,9 +43,16 @@ def get_reference_files(
             return {"test": [annotations_dir / "captioning_test_para.json"]}
         else:
             return {"val": [annotations_dir / "captioning_val_para.json"]}
+    # TODO : bilas / bila
     if dset_name == "BILA":
-        if test:
-            return {"test": [annotations_dir / "captioning_test_para.json"]}
-        else:
-            return {"val": [annotations_dir / "captioning_val_para.json"]}
+        if datatype == 'bila':
+            if test:
+                return {"test": [annotations_dir / "captioning_test_para.json"]}
+            else:
+                return {"val": [annotations_dir / "captioning_val_para.json"]}
+        if datatype == 'bilas':
+            if test:
+                return {"test": ["data/BilaS/caption_test.json"]}
+            else:
+                return {"val": ["data/BilaS/caption_valid.json"]}
     raise ValueError(f"Dataset unknown {dset_name}")

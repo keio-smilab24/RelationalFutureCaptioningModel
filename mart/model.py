@@ -331,9 +331,6 @@ def make_shifted_mask(input_mask, max_v_len, max_t_len, memory_len=0, decoder=Fa
             [1., 1., 1., 1., 1.]])
     """
     bsz, seq_len = input_mask.shape
-    print('---------------------')
-    print(max_v_len)
-    print(max_t_len)
     assert max_v_len + max_t_len + memory_len == seq_len
     shifted_mask = input_mask.new_zeros(
         bsz, max_v_len + max_t_len, seq_len
@@ -979,7 +976,8 @@ class RecursiveTransformer(nn.Module):
         super().__init__()
         self.cfg = cfg
         # TODO: vocab_sizeの変更
-        self.cfg.vocab_size = 307
+        # TODO : bilas bila
+        self.cfg.vocab_size = 301
         self.z_f = torch.randn(1, requires_grad=True).cuda()
         self.z_p = torch.randn(1, requires_grad=True).cuda()
         self.embeddings = EmbeddingsWithVideo(cfg, add_postion_embeddings=True)
