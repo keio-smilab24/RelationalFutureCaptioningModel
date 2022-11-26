@@ -17,23 +17,15 @@ from nntrainer import arguments, utils
 from nntrainer.utils_torch import set_seed
 from nntrainer.utils_yaml import load_yaml_config_file
 import datetime
+from utils.arguments import set_parser
+from utils.utils import fix_seed
 
 
 EXP_TYPE = ExperimentTypesConst.CAPTION
 
 
 def main():
-    # setup
-    parser = utils.ArgParser(description=__doc__)
-    arguments.add_default_args(parser)  # logging level etc.
-    arguments.add_exp_identifier_args(parser)  # arguments to identify the experiment to run
-    arguments.add_trainer_args(parser, dataset_path=False)  # general trainer arguments
-    parser.add_argument("--preload", action="store_true", help="Preload everything.")  # feature preloading
-    arguments_mart.add_mart_args(parser)  # some more paths for mart
-    parser.add_argument("--load_model", type=str, default=None, help="Load model from file.")
-    parser.add_argument("--print_model", action="store_true", help=f"Print model")
-    parser.add_argument('--datatype', type=str, default="bila", choices=['bila', 'bilas'])
-    args = parser.parse_args()
+    args = set_parser()
 
     # load repository config yaml file to dict
     exp_group, exp_name, config_file = arguments.setup_experiment_identifier_from_args(args, EXP_TYPE)
