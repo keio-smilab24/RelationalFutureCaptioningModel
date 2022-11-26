@@ -3,22 +3,17 @@ Captioning dataset.
 """
 import copy
 import json
-import math
 import os
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 import pandas as pd
-import h5py
-import pickle
 import nltk
 import numpy as np
 import torch
 from torch.utils import data
 from torch.utils.data.dataloader import default_collate
 from tqdm import tqdm
-import sys
-from torch import nn
 import cv2
 
 from mart.configs_mart import MartConfig, MartPathConst
@@ -112,11 +107,6 @@ class RecursiveCaptionDataset(data.Dataset):
     UNK = 6
     IGNORE = -1  # used to calculate loss
 
-    """
-    recurrent: if True, return recurrent data
-    """
-
-    # TODO : bilas / bila
     def __init__(
         self,
         dset_name: str,
@@ -160,17 +150,17 @@ class RecursiveCaptionDataset(data.Dataset):
 
         # Parameters for sequence lengths
         self.max_seq_len = max_v_len + max_t_len # 31
-        self.max_v_len = max_v_len # 9
+        self.max_v_len = max_v_len  # 9
         self.max_t_len = max_t_len  # 22
-        self.max_n_sen = max_n_sen # 12
+        self.max_n_sen = max_n_sen  # 12
 
         # Train or val mode
-        self.mode = mode # train
-        self.preload = preload # False
+        self.mode = mode        # train
+        self.preload = preload  # False
 
         # Recurrent or untied, different data styles for different models
-        self.recurrent = recurrent # True
-        self.untied = untied # False
+        self.recurrent = recurrent  # True
+        self.untied = untied        # False
         assert not (
             self.recurrent and self.untied
         ), "untied and recurrent cannot be True for both"
@@ -180,17 +170,17 @@ class RecursiveCaptionDataset(data.Dataset):
         # determine metadata file
         tmp_path = "BILA"
         self.mode_bilas = "val"
-        if mode == "train":  # 1333 videos
+        if mode == "train":
             if datatype == "bila":
                 data_path = self.annotations_dir / tmp_path / "captioning_train.json" # annotations/BILA/captioning_train.json
             elif datatype == 'bilas':
                 data_path = self.annotations_dir / 'bilas_mecab.jsonl'
-        elif mode == "val":  # 457 videos
+        elif mode == "val":
             if datatype == "bila":
                 data_path = self.annotations_dir / tmp_path / "captioning_val.json" # annotations/BILA/captioning_train.json
             elif datatype == 'bilas':
                 data_path = self.annotations_dir / 'bilas_valid_mecab.jsonl'
-        elif mode == "test":  # 457 videos
+        elif mode == "test":
             if datatype == "bila":
                 data_path = self.annotations_dir / tmp_path / "captioning_test.json" # annotations/BILA/captioning_train.json
             elif datatype == 'bilas':
@@ -206,11 +196,13 @@ class RecursiveCaptionDataset(data.Dataset):
         if datatype == 'bila':
             self.word2idx_file = (
                 self.annotations_dir / self.dset_name / "ponnet_word2idx.json"
-            ) # annotations/BILA/ponnet_word2idx.json
+            )
         elif datatype == "bilas":
             self.word2idx_file = Path(self.annotations_dir, "ponnet_word2idx.json")
+        
         if not os.path.exists(self.word2idx_file):
             max_words = make_dict(data_path, self.word2idx_file, datatype)
+        
         self.word2idx = json.load(self.word2idx_file.open("rt", encoding="utf8")) # 辞書 {word : ID(int)}
         self.idx2word = {int(v): k for k, v in list(self.word2idx.items())} # 逆
         print(f"WORD2IDX: {self.word2idx_file} len {len(self.word2idx)}")
@@ -236,13 +228,15 @@ class RecursiveCaptionDataset(data.Dataset):
                 coll_data.append(raw_data)
         
         self.data = coll_data
-        # {'clip_id': '9', 'sentence': 'a plastic bottle falls from the shelf because it strongly collides with robot'}
+        # {'clip_data': xxx, 'sentence': yyy}
 
         # ---------- Load video data ----------
 
         # Decide whether to load COOT embeddings or video features
+        
         # COOT embeddings
         self.data_type = DataTypesConstCaption.COOT_EMB # coot_emb
+        
         # map video id and clip id to clip number
         self.clip_nums = []
         for clip in tqdm(range(len(self.data))):
@@ -255,8 +249,10 @@ class RecursiveCaptionDataset(data.Dataset):
         )
 
         self.preloading_done = False
-        self.feature_check = []
-        self.future_feature_check = []
+        
+        # TODO : 不必要
+        # self.feature_check = []
+        # self.future_feature_check = []
 
     def __len__(self):
         return len(self.data)
@@ -266,7 +262,11 @@ class RecursiveCaptionDataset(data.Dataset):
         return items, meta
 
     def _load_ponnet_video_feature(
-        self, raw_name: str, num_images=5
+        self,
+        raw_name: str,
+        num_images: int=6,
+        start_frame: float=4.2,
+        interval: float=0.2,
     ) -> Tuple[np.array, np.array, List[np.array]]:
         """
         Load given S3D video features.
@@ -280,98 +280,55 @@ class RecursiveCaptionDataset(data.Dataset):
         """
         if self.datatype == "bila":
             # 動画に関する特徴量を取得
-            feat_file = raw_name + ".png"
-            tmp_img_0 = os.path.join(".", "ponnet_data", "3.0s_center_frames", feat_file)
-            tmp_img_1 = os.path.join(".", "ponnet_data", "3.2s_center_frames", feat_file)
-            tmp_img_2 = os.path.join(".", "ponnet_data", "3.4s_center_frames", feat_file)
-            tmp_img_3 = os.path.join(".", "ponnet_data", "3.6s_center_frames", feat_file)
-            tmp_img_4 = os.path.join(".", "ponnet_data", "3.8s_center_frames", feat_file)
-            tmp_img_5 = os.path.join(".", "ponnet_data", "4.0s_center_frames", feat_file)
-            fut_img_path = os.path.join(".", "ponnet_data", "4.2s_center_frames", feat_file)
-
-            fut_img = cv2.imread(fut_img_path)
+            frame = start_frame
+            fut_img = cv2.imread(os.path.join("ponnet_data", f"{frame:.1f}s_center_frames", raw_name+".png"))
             fut_img = cv2.resize(fut_img, dsize=(16, 16))
-            # rec_img = []
-            rec_im = cv2.imread(tmp_img_0)
-            rec_img = cv2.resize(rec_im, dsize=(16, 16))
-            # rec_img.append(rec_im)
+
             img_list = []
-            img_feat_0 = cv2.imread(tmp_img_0) # 224,224,3
-            img_feat_0 = torch.from_numpy(img_feat_0.astype(np.float32)).clone()
-            img_feat_0 = img_feat_0.reshape(-1, 150528)
-            img_list.append(img_feat_0)
-            img_feat_1 = cv2.imread(tmp_img_1)
-            img_feat_1 = torch.from_numpy(img_feat_1.astype(np.float32)).clone()
-            img_feat_1 = img_feat_1.reshape(-1, 150528)
-            img_list.append(img_feat_1)
-            img_feat_2 = cv2.imread(tmp_img_2)
-            img_feat_2 = torch.from_numpy(img_feat_2.astype(np.float32)).clone()
-            img_feat_2 = img_feat_2.reshape(-1, 150528)
-            img_list.append(img_feat_2)
-            img_feat_3 = cv2.imread(tmp_img_3)
-            img_feat_3 = torch.from_numpy(img_feat_3.astype(np.float32)).clone()
-            img_feat_3 = img_feat_3.reshape(-1, 150528)
-            img_list.append(img_feat_3)
-            img_feat_4 = cv2.imread(tmp_img_4)
-            img_feat_4 = torch.from_numpy(img_feat_4.astype(np.float32)).clone()
-            img_feat_4 = img_feat_4.reshape(-1, 150528)
-            img_list.append(img_feat_4)
-            img_feat_5 = cv2.imread(tmp_img_5)
-            img_feat_5 = torch.from_numpy(img_feat_5.astype(np.float32)).clone()
-            img_feat_5 = img_feat_5.reshape(-1, 150528)
-            img_list.append(img_feat_5)
+            for _ in range(num_images):
+                frame -= interval
+                img_path = os.path.join("ponnet_data", f"{frame:.1f}s_center_frames", raw_name+".png")
+                img = torch.from_numpy(cv2.imread(img_path).astype(np.float32)).clone()
+                img = img.reshape(-1, 150528)
+                img_list.append(img)
+            
+            rec_img = cv2.imread(os.path.join("ponnet_data", f"{frame:.1f}s_center_frames", raw_name+".png"))
+            rec_img = cv2.resize(rec_img, dsize=(16, 16))
         
+
         elif self.datatype == "bilas":
-            """
-            fut_img:  4.2
-            img_list: 4.0/3.8/3.6/3.4/3.2/3.0
-            rec_img: 3.0
-            """
             img_list = []
 
             if self.mode == "train":
                 datapath = 'data/BilaS/bilas_mecab.jsonl'
             elif self.mode == "val":
                 datapath = 'data/BilaS/bilas_valid_mecab.jsonl'
+            
             if self.mode_bilas == 'test':
                 datapath = 'data/BilaS/bilas_test_mecab.jsonl'
-
+            
             df = pd.read_json(datapath, orient='records', lines=True)
             df_scene = df[df['scene']==int(raw_name)]
-
-            if self.mode == "test":
-                print('---------- test -------------')
             
+            img_list_path = [
+                'image_rgb', 'image_depth', 'target_rgb', 'target_depth',
+                'attention_map_rgb', 'attention_map_depth'
+            ]
+            
+            img_list = []
             ponnet_path = Path('data/Ponnet')
-            image_rgb = str(Path(ponnet_path, df_scene['image_rgb'].iloc[-1]))
-            image_depth = str(Path(ponnet_path, df_scene['image_depth'].iloc[-1]))
-            target_rgb = str(Path(ponnet_path, df_scene['target_rgb'].iloc[-1]))
-            target_depth = str(Path(ponnet_path, df_scene['target_depth'].iloc[-1]))
-            attention_rgb = str(Path(ponnet_path, df_scene['attention_map_rgb'].iloc[-1]))
-            attention_depth = str(Path(ponnet_path, df_scene['attention_map_depth'].iloc[-1]))
+            for path in img_list_path:
+                img_path = str(Path(ponnet_path, df_scene[path].iloc[-1]))
+                
+                if path == "image_rgb":
+                    fut_img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(16, 16))
+                    rec_img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(16, 16))
+                
+                img = torch.from_numpy(cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(224, 224))).reshape(-1, 150528)
+                img_list.append(img)
 
-            fut_img = cv2.resize(cv2.imread(image_rgb).astype(np.float32), dsize=(16, 16))
-            rec_img = cv2.resize(cv2.imread(image_rgb).astype(np.float32), dsize=(16, 16))
-
-            image_rgb = torch.from_numpy(cv2.resize(cv2.imread(image_rgb).astype(np.float32), dsize=(224, 224))).reshape(-1, 150528)
-            image_depth = torch.from_numpy(cv2.resize(cv2.imread(image_depth).astype(np.float32), dsize=(224, 224))).reshape(-1, 150528)
-            target_rgb = torch.from_numpy(cv2.resize(cv2.imread(target_rgb).astype(np.float32), dsize=(224, 224))).reshape(-1, 150528)
-            target_depth = torch.from_numpy(cv2.resize(cv2.imread(target_depth).astype(np.float32), dsize=(224, 224))).reshape(-1, 150528)
-            attention_rgb = torch.from_numpy(cv2.resize(cv2.imread(attention_rgb).astype(np.float32), dsize=(224, 224))).reshape(-1, 150528)
-            attention_depth = torch.from_numpy(cv2.resize(cv2.imread(attention_depth).astype(np.float32), dsize=(224, 224))).reshape(-1, 150528)
-
-            img_list.extend([image_rgb, image_depth, target_rgb, target_depth, attention_rgb, attention_depth])
-            # rec_img.append([image_rgb, image_depth, target_rgb, target_depth, attention_rgb, attention_depth])
-
-        # print('------------------------------')
-        # print(fut_img.shape) # (16, 16, 3)
-        # print(img_list[0].shape) # len: 6 -> [1, 150528]
-        # print(rec_img.shape) # (16, 16, 3)
-        # print('------------------------------')
         return fut_img, img_list, rec_img
-        # fut_img : 4.2
-        # img_list(6) : 4.0 / 3.8 / 3.6 / 3.4 / 3.2 / 3.0
-        # rec_img : 3.0
+
 
     def convert_example_to_features(self, example):
         """
