@@ -55,7 +55,7 @@ def make_dict(train_caption_file, word2idx_filepath, datatype: str="bila"):
             words.extend(word_list)
     
     elif datatype == "bilas":
-        train_caption_file = "data/BilaS/bilas_mecab.jsonl"
+        train_caption_file = "data/BilaS/bilas_train_mecab.jsonl"
         word2idx_filepath = "data/BilaS/ponnet_word2idx.json"
         max_words = 0
         sentence_list = []
@@ -109,20 +109,20 @@ class RecursiveCaptionDataset(data.Dataset):
 
     def __init__(
         self,
-        dset_name: str,
-        max_t_len,
-        max_v_len,
-        max_n_sen,
-        mode="train",
-        recurrent=True,
-        untied=False,
+        dataset_name: str,
+        max_t_len: int,
+        max_v_len: int,
+        max_n_sen: int,
+        mode: str="train",
+        recurrent: bool=True,
+        untied: bool=False,
         video_feature_dir: Optional[str] = None,
         coot_model_name=None,
-        coot_mode="all",
-        coot_dim_vid=768,
-        coot_dim_clip=384,
+        coot_mode: str="all",
+        coot_dim_vid: int=768,
+        coot_dim_clip: int=384,
         annotations_dir: str = "annotations",
-        coot_feat_dir="provided_embeddings",
+        coot_feat_dir: str="provided_embeddings",
         dataset_max: Optional[int] = None,
         preload: bool = False,
         datatype: str = "bilas",
@@ -130,23 +130,27 @@ class RecursiveCaptionDataset(data.Dataset):
         self.datatype = datatype
 
         # metadata settings
-        self.dset_name = dset_name # BILA
+        self.dataset_name = dataset_name # BILA
         if datatype == "bila":
             self.annotations_dir = Path(annotations_dir) # annotations
         elif datatype == 'bilas':
             self.annotations_dir = Path('data/BilaS/')
 
         # COOT feature settings
-        self.coot_model_name = coot_model_name # yc2_100m_coot
-        self.coot_mode = coot_mode  # clip
-        self.coot_dim_vid = coot_dim_vid # 768
+        """
+        #TODO : 確認 
+        # cootのこの4つ使用していない
+        """
+        # self.coot_model_name = coot_model_name # yc2_100m_coot
+        # self.coot_mode = coot_mode  # clip
+        # self.coot_dim_vid = coot_dim_vid # 768
         self.coot_dim_clip = coot_dim_clip # 150528
-        self.coot_feat_dir = Path(coot_feat_dir) # PosixPath('provided_embeddings')
+        # self.coot_feat_dir = Path(coot_feat_dir) # PosixPath('provided_embeddings')
 
         # Video feature settings
         duration_file = "captioning_video_feat_duration.csv"
-        self.video_feature_dir = Path(video_feature_dir) / self.dset_name # data/mart_video_feature/BILA
-        self.duration_file = self.annotations_dir / self.dset_name / duration_file # annotations/BILA/captioning_video_feat_duration.csv
+        self.video_feature_dir = Path(video_feature_dir) / self.dataset_name # data/mart_video_feature/BILA
+        self.duration_file = self.annotations_dir / self.dataset_name / duration_file # annotations/BILA/captioning_video_feat_duration.csv
 
         # Parameters for sequence lengths
         self.max_seq_len = max_v_len + max_t_len # 31
@@ -174,7 +178,7 @@ class RecursiveCaptionDataset(data.Dataset):
             if datatype == "bila":
                 data_path = self.annotations_dir / tmp_path / "captioning_train.json" # annotations/BILA/captioning_train.json
             elif datatype == 'bilas':
-                data_path = self.annotations_dir / 'bilas_mecab.jsonl'
+                data_path = self.annotations_dir / 'bilas_train_mecab.jsonl'
         elif mode == "val":
             if datatype == "bila":
                 data_path = self.annotations_dir / tmp_path / "captioning_val.json" # annotations/BILA/captioning_train.json
@@ -190,12 +194,12 @@ class RecursiveCaptionDataset(data.Dataset):
             self.mode_bilas = "test"
         else:
             raise ValueError(
-                f"Mode must be [train, val] for {self.dset_name}, got {mode}"
+                f"Mode must be [train, val] for {self.dataset_name}, got {mode}"
             )
 
         if datatype == 'bila':
             self.word2idx_file = (
-                self.annotations_dir / self.dset_name / "ponnet_word2idx.json"
+                self.annotations_dir / self.dataset_name / "ponnet_word2idx.json"
             )
         elif datatype == "bilas":
             self.word2idx_file = Path(self.annotations_dir, "ponnet_word2idx.json")
@@ -222,7 +226,7 @@ class RecursiveCaptionDataset(data.Dataset):
             for line in lines:
                 line = json.loads(line)
                 raw_data = {
-                    'clip_id': line['image_rgb'].split('/')[-1].split('_')[0],
+                    'clip_id': line['setNum']+"_"+line["scene"],
                     'sentence': line['parse_sentence'],
                 }
                 coll_data.append(raw_data)
@@ -245,7 +249,7 @@ class RecursiveCaptionDataset(data.Dataset):
         self.frame_to_second = None  # Don't need this for COOT embeddings # None
 
         print(
-            f"Dataset {self.dset_name} #{len(self)} {self.mode} input {self.data_type}"
+            f"Dataset {self.dataset_name} #{len(self)} {self.mode} input {self.data_type}"
         )
 
         self.preloading_done = False
@@ -274,6 +278,8 @@ class RecursiveCaptionDataset(data.Dataset):
                 context with shape (dim_clip)
                 clips with shape (dim_clip)
         """
+        setNum = raw_name.split('_')[0]
+        scene  = raw_name.split('_')[-1]
         if self.datatype == "bila":
             # 動画に関する特徴量を取得
             frame = base_frame
@@ -296,7 +302,7 @@ class RecursiveCaptionDataset(data.Dataset):
             img_list = []
 
             if self.mode == "train":
-                datapath = 'data/BilaS/bilas_mecab.jsonl'
+                datapath = 'data/BilaS/bilas_train_mecab.jsonl'
             elif self.mode == "val":
                 datapath = 'data/BilaS/bilas_valid_mecab.jsonl'
             
@@ -304,7 +310,8 @@ class RecursiveCaptionDataset(data.Dataset):
                 datapath = 'data/BilaS/bilas_test_mecab.jsonl'
             
             df = pd.read_json(datapath, orient='records', lines=True)
-            df_scene = df[df['scene']==int(raw_name)]
+            df_scene = df[df["setNum"] == int(setNum)]
+            df_scene = df_scene[df_scene['scene']==int(scene)]
             
             img_list_path = [
                 'image_rgb', 'image_depth', 'target_rgb', 'target_depth',
@@ -613,17 +620,17 @@ class RecursiveCaptionDataset(data.Dataset):
 
 def prepare_batch_inputs(batch, use_cuda: bool, non_blocking=False):
     """
-    Maybe 各データをcudaに乗せる関数
+    各入力データをcudaに乗せる
     """
-    batch_inputs = dict()
-    bsz = len(batch["name"])
+    inputs = dict()
+    batch_size = len(batch["name"])
     for k, v in list(batch.items()):
-        assert bsz == len(v), (bsz, k, v)
+        assert batch_size == len(v), (batch_size, k, v)
         if use_cuda:
             if isinstance(v, torch.Tensor):
                 v = v.cuda(non_blocking=non_blocking)
-        batch_inputs[k] = v
-    return batch_inputs
+        inputs[k] = v
+    return inputs
 
 
 def step_collate(padded_batch_step):

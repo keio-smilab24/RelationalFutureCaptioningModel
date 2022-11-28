@@ -106,8 +106,11 @@ class CaptionEvaluator:
             if not list(data.keys())[0].startswith("v_"):
                 data = {"v_" + k: data[k] for k in data}
         elif datatype == 'bilas':
+            # print('------------- data --------------')
+            # print(data)
+            # print('---------------------------')
             if not list(data.keys())[0].startswith("v_"):
-                data = {"v_" + str(int(k)): data[k] for k in data}
+                data = {"v_" + k: data[k] for k in data}
         # print('---------- data -------------')
         # print(data)
         # # data : 'v_1005': 'robot robot robot robot robot robot robot robot robot robot robot robot robot because robot. ', 'v_1020': 'robot robot robot robot robot robot robot robot robot robot robot robot robot. '
@@ -198,18 +201,33 @@ class CaptionEvaluator:
     def evaluate_para(self, datatype="bila"):
         # This method averages the tIoU precision from METEOR, Bleu, etc. across videos
         gt_vid_ids = self.get_gt_vid_ids()
+        # print('--------- gt_vid --------------')
+        # print(gt_vid_ids) # v_N_XXX
         vid2idx = {k: i for i, k in enumerate(gt_vid_ids)}
+        # print('--------- vid2idx --------------')
+        # print(vid2idx) # {v_N_XXX: Y, ...}
+        # print('-----------------------')
         gts = {vid2idx[k]: [] for k in gt_vid_ids}
+        # print('----------- gts ------------')
+        # print(gts)
+        # print('-----------------------')
         for i, gt in enumerate(self.ground_truths):
             for k in gt_vid_ids:
                 if k not in gt:
                     continue
                 gts[vid2idx[k]].append(" ".join(parse_sent(gt[k], datatype=datatype)))
+        # print('------------ self predictions-------------')
+        # print(self.prediction)
+        # print('-------------------------')
         """
         gt_vid_ids : ['v_36', 'v_72', 'v_99', ,,, 'v_52', 'v_9']
         self.predietions: ['v_0001', 'v_0005', ... 'v_0106']
 
         """
+        # print('--------------------------')
+        # print(self.prediction)
+        # print(gt_vid_ids)
+        # print('--------------------------')
         res = {
             vid2idx[k]: [" ".join(parse_sent(self.prediction[k], datatype=datatype))]
             if k in self.prediction and len(self.prediction[k]) > 0
@@ -222,12 +240,12 @@ class CaptionEvaluator:
             else [""]
             for k in gt_vid_ids
         }
-        # print(datatype)
         # print('---------------gts res --------------')
         # print(gts)
         # # {0: ['robot rubs the arm on the yellow toy because there was it in the robot s orbit'], 1: 
         # print('---------------gts res --------------')
         # print(res)
+        # # print(para_res)
         # # 13: [''], 14: ['robot tried to put the the the the the because robot tried to put the'], 
         # print('---------------res gts --------------')
 

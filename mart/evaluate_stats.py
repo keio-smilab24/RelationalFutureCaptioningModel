@@ -76,7 +76,7 @@ def evaluate_stats_files(
     if datatype == "bila":
         sub_data = {k: v for k, v in list(sub_data.items()) if k in ref_data}
     elif datatype == 'bilas':
-        sub_data = {k: v for k, v in list(sub_data.items()) if str(int(k)) in ref_data}
+        sub_data = {k: v for k, v in list(sub_data.items()) if k in ref_data}
 
     # print('------- sub_data --------')
     # print(sub_data)
@@ -85,6 +85,7 @@ def evaluate_stats_files(
     submission_data_entries = [
         item for sublist in list(sub_data.values()) for item in sublist
     ]
+    # print('-------- submission_data_ent --------')
     # print(submission_data_entries)
 
     submission_sentences = [e["sentence"] for e in submission_data_entries]
