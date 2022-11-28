@@ -16,7 +16,7 @@ class BilaS(Dataset):
         self,
         root: str,
         params: Dict[str, Any],
-        data_file: str = "bilas_mecab.jsonl",
+        data_file: str = "bilas_train_mecab.jsonl",
         transforms: Optional[Callable] = None,
     ):
         super().__init__()
