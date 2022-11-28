@@ -1,25 +1,16 @@
-"""
-MART model.
-
-"""
 import copy
 import logging
 import math
 from pathlib import Path
-import sys
-import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.utils.tensorboard.summary import video
 
 from mart.configs_mart import MartConfig, MartPathConst
 from mart.masked_transformer import MTransformer
 from mart.loss_caption import LabelSmoothingLoss
 from nntrainer.utils_torch import count_parameters
 
-import cv2
-import os
 import torchvision.models as models
 
 
@@ -54,10 +45,10 @@ def create_mart_model(
     """
     cfg.max_position_embeddings = cfg.max_v_len + cfg.max_t_len
     cfg.vocab_size = vocab_size
-    if cfg.recurrent:
+    if cfg.recurrent: # true
         logger.info("Use recurrent model - Mine")
-        model = RecursiveTransformer(cfg)
-    if cfg.use_glove:
+        model = RecursiveTransformer(cfg, vocab_size=vocab_size)
+    if cfg.use_glove: # false
         if hasattr(model, "embeddings"):
             logger.info("Load GloVe as word embedding")
             model.embeddings.set_pretrained_embedding(
@@ -74,7 +65,7 @@ def create_mart_model(
             )
 
     # output model properties
-    if verbose:
+    if verbose: # true
         print(f"Model: {model.__class__.__name__}")
         count_parameters(model)
         if hasattr(model, "embeddings") and hasattr(
@@ -137,25 +128,6 @@ class PositionEncoding(nn.Module):
             pe = pe.unsqueeze(0)
         x = x + pe
         return x
-
-
-# class LayerNorm(nn.Module):
-#     def __init__(self, hidden_size, eps=1e-12):
-#         """
-#         Construct a layernorm module in the TF style
-#         (epsilon inside the square root).
-#         """
-#         super().__init__()
-#         self.weight = nn.Parameter(torch.ones(hidden_size))
-#         self.bias = nn.Parameter(torch.zeros(hidden_size))
-#         self.variance_epsilon = eps
-
-#     def forward(self, x):
-#         u = x.mean(-1, keepdim=True)
-#         s = (x - u).pow(2).mean(-1, keepdim=True)
-#         x = (x - u) / torch.sqrt(s + self.variance_epsilon)
-#         return self.weight * x + self.bias
-
 
 class SelfAttention(nn.Module):
     """
@@ -442,7 +414,12 @@ class EncoderWoMemory(nn.Module):
             [LayerWoMemory(cfg) for _ in range(cfg.num_hidden_layers)]
         )
 
-    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=True, clip_feats=None):
+    def forward(
+        self,
+        hidden_states,
+        attention_mask,
+        output_all_encoded_layers: bool=True,
+        clip_feats=None):
         """
         Args:
             prev_ms: [(N, M, D), ] * num_hidden_layers or None at first step.
@@ -452,6 +429,11 @@ class EncoderWoMemory(nn.Module):
             output_all_encoded_layers:
 
         Returns:
+        """
+        """
+        #TODO : 確認
+        output_all_encoded_layers = Falseの場合には
+        最後の出力だけ返すってこと??
         """
         all_encoder_layers = []
         for layer_idx, layer_module in enumerate(self.layer):
@@ -513,7 +495,6 @@ class Decoder(nn.Module):
             hidden_states: (N, L, D)
             attention_mask: (N, L)
             output_all_encoded_layers:
-
         Returns:
         """
         query_clip = torch.zeros(hidden_states.shape).cuda()
@@ -600,11 +581,11 @@ class EmbeddingsWithVideo(nn.Module):
         """
         add_postion_embeddings: whether to add absolute positional embeddings
         """
-        cfg.video_feature_size = 768
         self.add_postion_embeddings = add_postion_embeddings
         self.word_embeddings = nn.Embedding(
             cfg.vocab_size, cfg.word_vec_size, padding_idx=0
         )
+        
         self.word_fc = nn.Sequential(
             nn.LayerNorm(cfg.word_vec_size, eps=cfg.layer_norm_eps),
             nn.Dropout(cfg.hidden_dropout_prob),
@@ -626,8 +607,6 @@ class EmbeddingsWithVideo(nn.Module):
             )
         self.token_type_embeddings = nn.Embedding(cfg.type_vocab_size, cfg.hidden_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
         self.dropout = nn.Dropout(cfg.hidden_dropout_prob)
 
@@ -647,8 +626,8 @@ class EmbeddingsWithVideo(nn.Module):
     def forward(self, input_ids, video_features, token_type_ids):
         """
         Args:
-            input_ids: (N, L)
-            video_features: (N, L, D)
+            input_ids: (N, L) | CLS, VID...VID, SEP BOS, W..W, EOSm, PAD...PAD
+            video_features: (N, L, D) | XX, VID..VID, XX...XX
             token_type_ids: (N, L, D)
 
         Returns:
@@ -656,8 +635,6 @@ class EmbeddingsWithVideo(nn.Module):
         words_embeddings = self.word_fc(self.word_embeddings(input_ids))
         video_embeddings = self.video_embeddings(video_features)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-        # print("token_type_embeddings", token_type_embeddings.shape)
-        # print("word_embedding", words_embeddings.shape)
         words_embeddings += token_type_embeddings
         embeddings = words_embeddings + video_embeddings + token_type_embeddings
 
@@ -807,8 +784,8 @@ class LMPredictionHead(nn.Module):
         super().__init__()
         self.transform = PredictionHeadTransform(cfg)
 
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
+        # The output weights are the same as the input embeddings, 
+        # but there is　an output-only bias for each token.
         if cfg.share_wd_cls_weight:
             assert bert_model_embedding_weights is not None, (
                 "bert_model_embedding_weights should not be None "
@@ -837,7 +814,7 @@ class LMPredictionHead(nn.Module):
         hidden_states = self.decoder(hidden_states) + self.bias
         return hidden_states  # (N, L, vocab_size)
 
-
+# TODO : 使っていない
 class RelationalSelfAttention(nn.Module):
     """
     Relational self-attention (RSA)
@@ -847,13 +824,12 @@ class RelationalSelfAttention(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.m = m
-        self.hidden_size = 768
+        self.hidden_size = cfg.hidden_size
         self.query_layer = nn.Linear(self.hidden_size, self.hidden_size)
         self.key_layer = nn.Linear(self.hidden_size, self.hidden_size)
         self.value_layer = nn.Linear(self.hidden_size, self.hidden_size)
         self.p = torch.randn((m, self.hidden_size), requires_grad=True).cuda()
-        self.h =\
-            torch.randn((m * self.hidden_size, m), requires_grad=True).cuda()
+        self.h = torch.randn((m * self.hidden_size, m), requires_grad=True).cuda()
         self.g = torch.randn((m, self.hidden_size), requires_grad=True).cuda()
         self.one = torch.ones((m, 1)).cuda()
 
@@ -892,12 +868,10 @@ class TimeSeriesMoudule(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        # self.cfg.hidden_size = 768
         self.hidden_size = cfg.hidden_size
         self.TSEncoder = TimeSeriesEncoder(self.cfg)
         self.expand = nn.Linear(self.cfg.hidden_size, self.hidden_size)
         self.layernorm = nn.LayerNorm(self.hidden_size)
-        self.cfg.hidden_size = 768
         self.z = torch.randn(1, requires_grad=True).cuda()
 
     def forward(self, x):
@@ -943,25 +917,24 @@ class CLIPloss(nn.Module):
     CLIPで用いられているloss
     https://cdn.openai.com/papers/Learning_Transferable_Visual_Models_From_Natural_Language_Supervision.pdf
     """
-    def __init__(self):
+    def __init__(
+        self,
+        hidden_dim: int=768,
+        max_t_length: int=22,):
         super().__init__()
-        self.w = nn.Linear(22 * 768, 768)
+        self.w = nn.Linear(max_t_length * hidden_dim, hidden_dim)
         self.t = torch.randn(1, requires_grad=True).cuda()
         self.i_loss = nn.CrossEntropyLoss(ignore_index=0)
         self.t_loss = nn.CrossEntropyLoss(ignore_index=1)
-        self.norm_i = nn.LayerNorm(768)
-        self.norm_t = nn.LayerNorm(768)
+        self.norm_i = nn.LayerNorm(hidden_dim)
+        self.norm_t = nn.LayerNorm(hidden_dim)
 
     def forward(self, clip, text):
         text = torch.flatten(text, 1)
-        # print("clip", clip.shape)
-        # print("text", text.shape)
         text = self.w(text)
         i_e = self.norm_i(clip)
         t_e = self.norm_t(text)
         logits = torch.matmul(i_e, torch.t(t_e)) * torch.exp(self.t)
-        # print(logits)
-        # sys.exit()
         n = i_e.shape[0]
         labels = torch.arange(n, device=torch.device("cuda"))
         loss_i = self.i_loss(logits, labels)
@@ -970,26 +943,29 @@ class CLIPloss(nn.Module):
         return cliploss
 
 
-# MART model
 class RecursiveTransformer(nn.Module):
-    def __init__(self, cfg: MartConfig):
+    def __init__(
+        self,
+        cfg: MartConfig,
+        vocab_size: int
+    ):
         super().__init__()
         self.cfg = cfg
-        # TODO: vocab_sizeの変更
-        # TODO : bilas bila
-        self.cfg.vocab_size = 301
-        self.z_f = torch.randn(1, requires_grad=True).cuda()
-        self.z_p = torch.randn(1, requires_grad=True).cuda()
+        self.cfg.vocab_size = vocab_size
+        
         self.embeddings = EmbeddingsWithVideo(cfg, add_postion_embeddings=True)
         self.TSModule = TimeSeriesMoudule(cfg)
         self.encoder = EncoderWoMemory(cfg)
+        
         decoder_classifier_weight = (
             self.embeddings.word_embeddings.weight
             if self.cfg.share_wd_cls_weight
             else None
         )
+        
         self.decoder = LMPredictionHead(cfg, decoder_classifier_weight)
         self.transformerdecoder = Decoder(cfg)
+        
         if self.cfg.label_smoothing != 0:
             self.loss_func = LabelSmoothingLoss(
                 cfg.label_smoothing, cfg.vocab_size, ignore_index=-1
@@ -998,8 +974,10 @@ class RecursiveTransformer(nn.Module):
             self.loss_func = nn.CrossEntropyLoss(ignore_index=-1)
         self.contloss_func = nn.CrossEntropyLoss(ignore_index=-1)
         self.actionloss_func = nn.CrossEntropyLoss()
+        
         # clipの特徴量の次元
         input_size = 768
+        # TODO : memo cnnを使ったadjustがbetterな気がする
         self.size_adjust = nn.Linear(150528, 768)
         self.upsampling = nn.Linear(768, 1024)
         self.pred_f = nn.Sequential(
@@ -1017,10 +995,10 @@ class RecursiveTransformer(nn.Module):
             nn.Linear(input_size, input_size),
             nn.Dropout(0.2),
         )
+
         self.future_loss = nn.MSELoss()
-        # self.future_loss = nn.L1Loss()
         self.apply(self.init_bert_weights)
-        self.cliploss = CLIPloss()
+        self.cliploss = CLIPloss(hidden_dim=cfg.hidden_size, max_t_length=cfg.max_t_len)
 
         self.idx = 0
         self.mlp = SubLayerT()
@@ -1041,22 +1019,51 @@ class RecursiveTransformer(nn.Module):
             module.bias.data.zero_()
 
     def forward_step(
-        self, input_ids, video_features, input_masks, token_type_ids
+        self,
+        input_ids: torch.Tensor,
+        video_features: torch.Tensor,
+        input_masks: torch.Tensor,
+        token_type_ids: torch.Tensor
     ):
         """
-        single step forward in the recursive structure
+            singleure step forward in the recursive struct
+        Args:
+            input_ids (torch.Tensor): [16, 31]
+            video_features (torch.Tensor): [16, 31, 150528]
+            input_masks (torch.Tensor): [16, 31]
+            token_type_ids (torch.Tensor): [16, 31]
         """
-        fut_emb_list = video_features[:, 1:8, :].clone()
-        video_features = self.size_adjust(video_features)
+        """
+        # TODO : memo
+        fut_emb_list : 1=img_list=[0], ... 6=img_list[5], 7=?
+        """
+        """
+        # TODO : 確認
+        video_features : video + textの情報を持つよね？
+        """
+        fut_emb_list = video_features[:, 1:8, :].clone()  # (B, 7, 150528)
+        video_features = self.size_adjust(video_features) # (B, 31, 150528) -> (B, 31, 768)
+        
         self.pred_reconst = []
         self.gt_rec = []
+        # TODO : ここ1こずつじゃなくて一気にできるかな
+        # TODO : videoかえるときに変えないと
         for idx in range(7):
+            # self.mlp = resnetを用いた特徴量抽出
             video_features[:, idx+1, :] = self.mlp(fut_emb_list[:, idx, :]).clone()
+        
+        # TODO : ここを↓に書き換え
+        # rec_feature = video_features[:,1,:].clone()
+        # fut_clip = video_features[:,7,:].clone()
+
         fut_emb_list = video_features[:, 1:8, :].clone()
+        # TODO : 0はCLS tokenじゃない？
+        # Ans  : fut_embでVID部分だけ抜き出しているから0でOK
         rec_tmp = fut_emb_list[:, 0, :].clone()
+        # TODO : 6は逆に5のデータ　== 4.0の画像たよね？
         fut_clip = fut_emb_list[:, 6, :].clone()
 
-        clip_feats = fut_emb_list.clone()
+        clip_feats = fut_emb_list.clone() # 画像特徴量
 
         # Time Series Module
         _, clip_feats = self.TSModule(clip_feats)
@@ -1100,18 +1107,7 @@ class RecursiveTransformer(nn.Module):
 
         Returns:
         """
-        # print('-------------------------')
-        # print('gt_rec')
-        # print(len(gt_rec)) # 1
-        # print('-------------------------')
-
-        step_size = len(input_ids_list)
-        # print('-----------------------')
-        # print('input_ids_list')
-        # print(len(input_ids_list)) # 1
-        # print(len(input_ids_list[0])) # 16
-        # print(input_ids_list)
-        # print('-----------------------')
+        step_size = len(input_ids_list) # 1
         encoded_outputs_list = []  # [(N, L, D)] * step_size
         prediction_scores_list = []  # [(N, L, vocab_size)] * step_size
         pred_reconst = []
@@ -1150,10 +1146,6 @@ class RecursiveTransformer(nn.Module):
         
         # compute loss, get predicted words
         caption_loss = 0.0
-        # print('-----------------')
-        # print('step size')
-        # print(step_size) # 1
-        # print('-----------------')
         for idx in range(step_size):
             snt_loss = self.loss_func(
                 prediction_scores_list[idx].view(-1, self.cfg.vocab_size),
@@ -1175,11 +1167,6 @@ class RecursiveTransformer(nn.Module):
 
             clip_loss += self.cliploss(pred_reconst[idx], encoded_outputs_list[idx][0][:, 9:, :])
             if gt_rec is not None:
-                # print('--------------------')
-                # print('gt_reconst') 
-                # print(len(gt_reconst)) # 1
-                # print(len(gt_reconst[idx])) # 16
-                # print('--------------------')
                 rec_loss = self.future_loss(pred_reconst[idx].reshape(-1, 16, 16, 3), gt_reconst[idx] / 255.)
 
             if gt_clip is not None and train:
