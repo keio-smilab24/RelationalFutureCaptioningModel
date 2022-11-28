@@ -283,8 +283,6 @@ class RecursiveCaptionDataset(data.Dataset):
         """
         if self.datatype == "bila":
             frame = base_frame
-            fut_img = cv2.imread(os.path.join("ponnet_data", f"{frame:.1f}s_center_frames", raw_name+".png"))
-            fut_img = cv2.resize(fut_img, dsize=(16, 16))
             
             img_list = []
             for _ in range(min(self.num_images,6)):
@@ -325,13 +323,12 @@ class RecursiveCaptionDataset(data.Dataset):
                 img_path = str(Path(ponnet_path, df_scene[img_list_path[idx]].iloc[-1]))
                 
                 if img_list_path[idx] == "image_rgb":
-                    fut_img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(16, 16))
                     rec_img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(16, 16))
                 
                 img = torch.from_numpy(cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(224, 224))).reshape(-1, 150528)
                 img_list.append(img)
 
-        return fut_img, img_list, rec_img
+        return img_list, rec_img
 
 
     def convert_example_to_features(self, example):
@@ -351,7 +348,7 @@ class RecursiveCaptionDataset(data.Dataset):
         }
         """
         raw_name = example["clip_id"] # clip_id : VideoID/SceneID
-        fut_img, img_list, rec_img = self._load_ponnet_video_feature(raw_name)
+        img_list, rec_img = self._load_ponnet_video_feature(raw_name)
         
         single_video_features = []
         single_video_meta = []
@@ -362,7 +359,6 @@ class RecursiveCaptionDataset(data.Dataset):
             example["sentence"],
             rec_img,
             img_list,
-            fut_img,
         )
         """
         # TODO : memo
@@ -381,7 +377,6 @@ class RecursiveCaptionDataset(data.Dataset):
         sentence,
         gt_rec,
         img_list,
-        fut_img
     ):
         """
         make features for a single clip-sentence pair.
@@ -428,7 +423,6 @@ class RecursiveCaptionDataset(data.Dataset):
             input_mask=np.array(input_mask).astype(np.float32),
             token_type_ids=np.array(token_type_ids).astype(np.int64),
             video_feature=feat.astype(np.float32),
-            gt_clip = fut_img.astype(np.float32),
             gt_rec = gt_rec,
         )
         meta = dict(name=name, sentence=sentence)

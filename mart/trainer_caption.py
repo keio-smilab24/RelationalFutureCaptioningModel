@@ -316,7 +316,7 @@ class MartTrainer(trainer_base.BaseTrainer):
             val_loader: Validation dataloader.
         """
         if use_wandb:
-            wandb_name = datatype
+            wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}"
             wandb.init(name=wandb_name, project="BilaS")
         
         # time book-keeping etc.
@@ -379,7 +379,6 @@ class MartTrainer(trainer_base.BaseTrainer):
                     input_masks_list = [e["input_mask"] for e in batched_data] # torch.Size([16, 31])
                     token_type_ids_list = [e["token_type_ids"] for e in batched_data] # # torch.Size([16, 31])
                     input_labels_list = [e["input_labels"] for e in batched_data] # # torch.Size([16, 31])
-                    gt_clip = [e["gt_clip"] for e in batched_data] # torch.Size([16, 16, 16, 3])
                     gt_rec = [e["gt_rec"] for e in batched_data] # torch.Size([16, 16, 16, 3])
 
                     if self.cfg.debug:
@@ -402,7 +401,6 @@ class MartTrainer(trainer_base.BaseTrainer):
                         input_masks_list,
                         token_type_ids_list,
                         input_labels_list,
-                        gt_clip,
                         gt_rec,
                         train = True
                     )
@@ -594,17 +592,14 @@ class MartTrainer(trainer_base.BaseTrainer):
                     input_masks_list = [e["input_mask"] for e in batched_data]
                     token_type_ids_list = [e["token_type_ids"] for e in batched_data]
                     input_labels_list = [e["input_labels"] for e in batched_data]
-                    gt_clip = [e["gt_clip"] for e in batched_data]
                     gt_rec = [e["gt_rec"] for e in batched_data]
 
-                    # ver. future
                     loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                         input_ids_list,
                         video_features_list,
                         input_masks_list,
                         token_type_ids_list,
                         input_labels_list,
-                        gt_clip,
                         gt_rec,
                     )
                     batch_loss += loss
@@ -897,17 +892,14 @@ class MartTrainer(trainer_base.BaseTrainer):
                     input_masks_list = [e["input_mask"] for e in batched_data]
                     token_type_ids_list = [e["token_type_ids"] for e in batched_data]
                     input_labels_list = [e["input_labels"] for e in batched_data]
-                    gt_clip = [e["gt_clip"] for e in batched_data]
                     gt_rec = [e["gt_rec"] for e in batched_data]
 
-                    # ver. future
                     loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                         input_ids_list,
                         video_features_list,
                         input_masks_list,
                         token_type_ids_list,
                         input_labels_list,
-                        gt_clip,
                         gt_rec
                     )
                     batch_loss += loss

@@ -1000,7 +1000,7 @@ class RecursiveTransformer(nn.Module):
             nn.Dropout(0.2),
         )
 
-        self.future_loss = nn.MSELoss()
+        self.rec_loss = nn.MSELoss()
         self.apply(self.init_bert_weights)
         self.cliploss = CLIPloss(hidden_dim=cfg.hidden_size, max_t_length=cfg.max_t_len)
 
@@ -1025,7 +1025,7 @@ class RecursiveTransformer(nn.Module):
     def forward_step(
         self,
         input_ids: torch.Tensor,
-        video_features: torch.Tensor,
+        features: torch.Tensor,
         input_masks: torch.Tensor,
         token_type_ids: torch.Tensor
     ):
@@ -1037,53 +1037,39 @@ class RecursiveTransformer(nn.Module):
             input_masks (torch.Tensor): [16, 31]
             token_type_ids (torch.Tensor): [16, 31]
         """
-        """
-        # TODO : memo
-        fut_emb_list : 1=img_list=[0], ... 6=img_list[5], 7=?
-        """
-        """
-        # TODO : 確認
-        video_features : video + textの情報を持つよね？
-        """
         # 画像特徴だけ抽出
-        fut_emb_list = video_features[:, 1:self.cfg.max_v_len-1, :].clone()  # (B, 7, 150528)
-        video_features = self.size_adjust(video_features) # (B, 31, 150528) -> (B, 31, 768)
+        img_feats = features[:, 1:self.cfg.max_v_len-1, :].clone()  # (B, 7, 150528)
+        features = self.size_adjust(features) # (B, 31, 150528) -> (B, 31, 768)
         
         self.pred_reconst = []
         self.gt_rec = []
-        # TODO : ここ1こずつじゃなくて一気にできるかな
-        for idx in range(self.cfg.max_v_len-2):
-            # self.mlp = resnetを用いた特徴量抽出
-            video_features[:, idx+1, :] = self.mlp(fut_emb_list[:, idx, :]).clone()
         
-        # TODO : ここを↓に書き換え
-        # rec_feature = video_features[:,1,:].clone()
-        # fut_clip = video_features[:,7,:].clone()
+        # resnetを用いた特徴量抽出
+        for idx in range(self.cfg.max_v_len-2):
+            features[:, idx+1, :] = self.mlp(img_feats[:, idx, :]).clone()
 
-        fut_emb_list = video_features[:, 1:self.cfg.max_v_len-1, :].clone()
-        rec_tmp = fut_emb_list[:, 0, :].clone()
-        fut_clip = fut_emb_list[:, 0, :].clone()
-
-        clip_feats = fut_emb_list.clone() # 画像特徴量
+        # 再構成用
+        rec_feature = features[:,1,:].clone()
+        # 画像特徴量only
+        img_feats = features[:, 1:self.cfg.max_v_len-1, :].clone()
 
         # Time Series Module
-        _, clip_feats = self.TSModule(clip_feats)
+        _, img_feats = self.TSModule(img_feats)
 
         embeddings = self.embeddings(
-            input_ids, video_features, token_type_ids
+            input_ids, features, token_type_ids
         )  # (N, L, D)
         encoded_layer_outputs = self.encoder(
             embeddings, input_masks, output_all_encoded_layers=False
         )  # both outputs are list
         decoded_layer_outputs = self.transformerdecoder(
-            encoded_layer_outputs[-1], input_masks, clip_feats
+            encoded_layer_outputs[-1], input_masks, img_feats
         )
         prediction_scores = self.decoder(
             decoded_layer_outputs[-1]
         )  # (N, L, vocab_size)
-        return encoded_layer_outputs, prediction_scores, rec_tmp, fut_clip
+        return encoded_layer_outputs, prediction_scores, rec_feature
 
-    # ver. future
     def forward(
         self,
         input_ids_list,
@@ -1091,7 +1077,6 @@ class RecursiveTransformer(nn.Module):
         input_masks_list,
         token_type_ids_list,
         input_labels_list,
-        gt_clip=None,
         gt_rec=None,
         train = False,
     ):
@@ -1112,24 +1097,19 @@ class RecursiveTransformer(nn.Module):
         encoded_outputs_list = []  # [(N, L, D)] * step_size
         prediction_scores_list = []  # [(N, L, vocab_size)] * step_size
         pred_reconst = []
-        pred_fut = []
         gt_reconst = []
-        gt_fut = []
         action_score = []
-        fut_loss = 0
 
         if gt_rec is not None:
             for idx in range(step_size):
-                encoded_layer_outputs, prediction_scores, pred_tmp, fut_clip = self.forward_step(
+                encoded_layer_outputs, prediction_scores, pred_tmp = self.forward_step(
                     input_ids_list[idx],
                     video_features_list[idx],
                     input_masks_list[idx],
                     token_type_ids_list[idx]
                 )
-                gt_fut.append(gt_clip[idx])
                 gt_reconst.append(gt_rec[idx])
                 pred_reconst.append(pred_tmp)
-                pred_fut.append(fut_clip)
                 encoded_outputs_list.append(encoded_layer_outputs)
                 prediction_scores_list.append(prediction_scores)
                 action_score.append(prediction_scores[:, 7, :])
@@ -1171,12 +1151,8 @@ class RecursiveTransformer(nn.Module):
 
             clip_loss += self.cliploss(pred_reconst[idx], encoded_outputs_list[idx][0][:, self.cfg.max_v_len:, :])
             if gt_rec is not None:
-                rec_loss = self.future_loss(pred_reconst[idx].reshape(-1, 16, 16, 3), gt_reconst[idx] / 255.)
-            
-            # if gt_clip is not None and train:
-            #     fut_loss += self.future_loss(pred_fut[idx].reshape(-1, 16, 16, 3), gt_fut[idx] / 255.)
+                rec_loss = self.rec_loss(pred_reconst[idx].reshape(-1, 16, 16, 3), gt_reconst[idx] / 255.)
 
-            # caption_loss += 0.9 * snt_loss + 1000 * rec_loss + 1 * clip_loss + iwp_loss / 100 + 1 * fut_loss
             caption_loss += 15 * snt_loss + 500 * rec_loss + 4 * clip_loss + iwp_loss / 100
         caption_loss /= step_size
         return caption_loss, prediction_scores_list, snt_loss, rec_loss, clip_loss
