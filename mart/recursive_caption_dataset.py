@@ -150,7 +150,8 @@ class RecursiveCaptionDataset(data.Dataset):
         # Video feature settings
         duration_file = "captioning_video_feat_duration.csv"
         self.video_feature_dir = Path(video_feature_dir) / self.dataset_name # data/mart_video_feature/BILA
-        self.duration_file = self.annotations_dir / self.dataset_name / duration_file # annotations/BILA/captioning_video_feat_duration.csv
+        self.duration_file = self.annotations_dir / self.dataset_name / duration_file # annotations/BILA/captioning_video_feat_duration.csv'
+        self.num_images = max_v_len - 2
 
         # Parameters for sequence lengths
         self.max_seq_len = max_v_len + max_t_len # 31
@@ -264,32 +265,30 @@ class RecursiveCaptionDataset(data.Dataset):
     def _load_ponnet_video_feature(
         self,
         raw_name: str,
-        num_images: int=6,
-        base_frame: float=4.0,
+        base_frame: float=4.2,
         interval: float=0.2,
     ) -> Tuple[np.array, np.array, List[np.array]]:
         """
-        Load given S3D video features.
+        Summary:
+            bila:
+                画像を格納したリスト・t+1の画像・最も前の画像を返す
+            bilas:
+                カメラ視点のrgbd・targetのrgbd・attentionのrgbdの6枚を格納したリストを返す
+                t+1, 最も前の画像はカメラ視点のrgbとしている
         Args:
-            raw_name: Video ID | Scene
-        Returns:
-            Tuple of:
-                video with shape (dim_video)
-                context with shape (dim_clip)
-                clips with shape (dim_clip)
+            raw_name   : Video ID | Scene
+            num_images : 画像の枚数
+            base_frame : bilaデータセットのtとなる秒数
+            interval   : bilaデータセットにおいて各画像の差分時間
         """
-        setNum = raw_name.split('_')[0]
-        scene  = raw_name.split('_')[-1]
         if self.datatype == "bila":
-            # 動画に関する特徴量を取得
             frame = base_frame
             fut_img = cv2.imread(os.path.join("ponnet_data", f"{frame:.1f}s_center_frames", raw_name+".png"))
             fut_img = cv2.resize(fut_img, dsize=(16, 16))
             
             img_list = []
-            for i in range(num_images):
-                if i != 0:
-                    frame -= interval
+            for _ in range(min(self.num_images,6)):
+                frame -= interval
                 img_path = os.path.join("ponnet_data", f"{frame:.1f}s_center_frames", raw_name+".png")
                 img = torch.from_numpy(cv2.imread(img_path).astype(np.float32)).clone()
                 img = img.reshape(-1, 150528)
@@ -299,6 +298,8 @@ class RecursiveCaptionDataset(data.Dataset):
             rec_img = cv2.resize(rec_img, dsize=(16, 16))
 
         elif self.datatype == "bilas":
+            setNum = raw_name.split('_')[0]
+            scene  = raw_name.split('_')[-1]
             img_list = []
 
             if self.mode == "train":
@@ -320,10 +321,10 @@ class RecursiveCaptionDataset(data.Dataset):
             
             img_list = []
             ponnet_path = Path('data/Ponnet')
-            for path in img_list_path:
-                img_path = str(Path(ponnet_path, df_scene[path].iloc[-1]))
+            for idx in range(self.num_images):
+                img_path = str(Path(ponnet_path, df_scene[img_list_path[idx]].iloc[-1]))
                 
-                if path == "image_rgb":
+                if img_list_path[idx] == "image_rgb":
                     fut_img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(16, 16))
                     rec_img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(16, 16))
                 
@@ -392,41 +393,31 @@ class RecursiveCaptionDataset(data.Dataset):
             video_feature: Either np.array of rgb+flow features or Dict[str, np.array] of COOT embeddings
             clip_idx: clip number in the video (needed to loat COOT features)
         """
-        frm2sec = None
 
-        # future
-        feat, video_tokens, video_mask = self._load_indexed_video_feature(
-            img_list[0], frm2sec, img_list
-        )
+        # 画像の特徴量 + textの特徴量を合わせた形状のfeatと画像用のmaskを作成
+        feat, video_tokens, video_mask = self._load_indexed_video_feature(img_list)
 
+        # text用のtokenとmaskを作成
         text_tokens, text_mask = self._tokenize_pad_sentence(sentence)
-
-        # vide_tokens : CLS VID ... VID SEP
-        # text_tokens : BOS word1 ... wordN EOS PAD ... PAD
-        # input_tokens: CLS VID..VID SEP BOS word1...wordN EOS PAD ... PAD
+        
+        # img_tokenとtext_tokenを連結
         input_tokens = video_tokens + text_tokens
 
-        # 辞書からtokenに該当するIDを取得 / 存在しない場合はUNK_TOKEN
+        # token(単語含む) -> id列
         input_ids = [
             self.word2idx.get(t, self.word2idx[self.UNK_TOKEN]) for t in input_tokens
         ]
-        
-        # shifted right, `-1` is ignored when calculating CrossEntropy Loss
-        # text部分のみ辞書ID, その他は-1のリストを作成
+
+        # text部分のみID, その他は-1のリストを作成
+        # -1 はCElossの計算に含まれない
         input_labels = (
             [self.IGNORE] * len(video_tokens)
             + [ self.IGNORE if m == 0 else tid
                 for tid, m in zip(input_ids[-len(text_mask):], text_mask)][1:]
             + [self.IGNORE]
         )
-        """
-        # TODO : 確認
-        ほぼ全部1になっている
-        video_tokens : 全て1
-        text_token : PAD以外1? PADは0になっていると思われる
-        になっているけど大丈夫か
-        """
-        input_mask = video_mask + text_mask # 31 = 9 + 22
+
+        input_mask = video_mask + text_mask
         token_type_ids = [0] * self.max_v_len + [1] * self.max_t_len
 
         data = dict(
@@ -441,12 +432,21 @@ class RecursiveCaptionDataset(data.Dataset):
             gt_rec = gt_rec,
         )
         meta = dict(name=name, sentence=sentence)
+        
         return data, meta
 
     def _get_vt_features(
-        self, video_feat_tuple, max_v_l
+        self,
+        video_feat_tuple: torch.Tensor,
+        max_v_l: int,
     ):
-        # ひとまとめにしたvideo関連の特徴量から必要なものを抽出
+        """
+        Summary:
+            ひとまとめにしてあるimage関連の特徴量から、将来(4.2s)の画像を抽出
+        Args:
+            video_feat_tuple (torch.Tensor) : 
+            max_v_l (int) : 
+        """
         """
         # TODO : memo
         max_v_l : 1
@@ -454,93 +454,59 @@ class RecursiveCaptionDataset(data.Dataset):
         feat.shape : (1, 150528)
         valid_l = 1
         """
+        
         valid_l = 0
         feat = np.zeros((max_v_l, self.coot_dim_clip))
         feat[valid_l] = video_feat_tuple
         valid_l += 1
         return feat, valid_l
 
-    # future
+
     def _load_indexed_video_feature(
-        self, raw_feat, frm2sec, img_list
+        self,
+        img_list: list,
     ):
-        # raw_feat : img_list[0]
         """
-        [CLS], [VID], ..., [VID], [SEP], [PAD], ..., [PAD],
-        All non-PAD tokens are valid, will have a mask value of 1.
-        Returns:
-            feat is padded to length of (self.max_v_len + self.max_t_len,)
-            video_tokens: self.max_v_len
-            mask: self.max_v_len
+        Summary:
+            imageのtokenとmask
+            image + textの形状の特徴量を作成し、image部分に特徴量を入れる
+        Args:
+            img_list: 画像の特徴量を格納したリスト
         """
-        # COOT video text data as input
-        max_v_l = self.max_v_len - 8
         
-        # future
-        raw_feat, _ = self._get_vt_features(
-            raw_feat, max_v_l
-        )
-        """
-        # TODO : memo
-        self.max_v_len : 9
-        video_tokens: cls + VID .... VID + SEP
-        """
         # VIDEO_TOKEN : CLS, VID, ..., VID, SEP
-        # TODO PAD部分を削除した
         video_tokens = (
             [self.CLS_TOKEN]
             + [self.VID_TOKEN] * (self.max_v_len - 2)
             + [self.SEP_TOKEN]
         )
         
-        # VIDEO_TOKENの部分を1とするmaskを作成
+        # VIDEO関連のトークン部分を1とするmaskを作成
+        # TODO : 質問ver3.4
         mask = [1] * self.max_v_len
         
-        """
-        #TODO : memo
-        self.max_v_len : 9
-        self.max_t_len : 22
-        raw_feat.shape : (1, 150528)
-        """
-        feat = np.zeros((self.max_v_len + self.max_t_len, raw_feat.shape[1]))
-        """
-        # TODO : memo
-        feat.shape : (31, 150528)
-        feat[1] = 150528
-        len(img_list) : 6
-        """
-        feat[1] = raw_feat
-        """
-        # TODO : 確認
-        idx + 2はなんのため
-        raw_feat = img_list[0]なので
-        feat[idx+1] = img_list[idx] ってことかな
-            CLSを考慮した+1
-        """
+        # img + text の特徴を作成 + imgの特徴量を格納
+        feat = np.zeros((self.max_v_len + self.max_t_len, img_list[0].shape[1]))
         for idx in range(len(img_list)):
-            feat[idx+2] = img_list[idx]
-        feat[7] = img_list[4]
+            feat[idx+1] = img_list[idx]
 
         return feat, video_tokens, mask
 
     def _tokenize_pad_sentence(self, sentence):
         """
-        [BOS], [WORD1], [WORD2], ..., [WORDN], [EOS], [PAD], ..., [PAD],
-            len == max_t_len
-        All non-PAD values are valid, with a mask value of 1
+        Summary:
+            text用のtokenとmaskを作成して返す
+            token : BOS, Word1, ..., WordN, EOS, SEP, ..., SEP
+            mask  :  1     1    ...    1     1    0   ...   0
         """
-        max_t_len = self.max_t_len
-
-        # 単語区切りのsentenceをスペースで区切り、
-        # 先頭と末尾に BOS と EOS を追加する
-        text_tokens = nltk.tokenize.word_tokenize(sentence.lower())[: max_t_len - 2]
+        # token作成
+        text_tokens = nltk.tokenize.word_tokenize(sentence.lower())[: self.max_t_len - 2]
         text_tokens = [self.BOS_TOKEN] + text_tokens + [self.EOS_TOKEN]
         
-        # 必要に応じてPAD tokenを追加し、
-        # text部分(EOS~BOS)は1 / PAD部分は0のmaskを作成
+        # 不足分はPADを追加
         num_words = len(text_tokens)
-        mask = [1] * num_words + [0] * (max_t_len - num_words)
-        text_tokens += [self.PAD_TOKEN] * (max_t_len - num_words)
+        mask = [1] * num_words + [0] * (self.max_t_len - num_words)
+        text_tokens += [self.PAD_TOKEN] * (self.max_t_len - num_words)
         
         return text_tokens, mask
 

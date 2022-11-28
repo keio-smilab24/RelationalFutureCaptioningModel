@@ -530,10 +530,9 @@ class TrmEncLayer(nn.Module):
             x: (N, L, D)
         Returns:
         """
-        # tmp_x = x.clone().cuda()
         # x = self.LayerNorm(x)
-        tmp_x = x.clone().cuda()
-        target = tmp_x.clone().cuda()
+        tmp_x = x.clone().cuda()      # (16, 7, 768)
+        target = tmp_x.clone().cuda() # (16, 7, 768)
         target = self.attention(target, tmp_x)
         x = target.clone().cuda()
         x = self.z * tmp_x + (1 - self.z) * x
@@ -648,20 +647,19 @@ class EmbeddingsWithVideo(nn.Module):
 
 
 class MultiHeadRSA(nn.Module):
-    def __init__(self, cfg, m=7):
+    def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.m = m
+        self.num_image = cfg.max_v_len - 2
         self.hidden_size = cfg.hidden_size
         self.head = cfg.max_v_len - 2
         self.query_layer = nn.Linear(self.hidden_size, self.hidden_size)
         self.key_layer = nn.Linear(self.hidden_size, self.hidden_size)
         self.value_layer = nn.Linear(self.hidden_size, self.hidden_size)
-        self.p = torch.randn((self.head, m, self.hidden_size), requires_grad=True).cuda()
-        self.h =\
-            torch.randn((self.head, m * self.hidden_size, m), requires_grad=True).cuda()
-        self.g = torch.randn((self.head, m, self.hidden_size), requires_grad=True).cuda()
-        self.one = torch.ones((m, 1)).cuda()
+        self.p = torch.randn((self.head, self.num_image, self.hidden_size), requires_grad=True).cuda()
+        self.h = torch.randn((self.head, self.num_image * self.hidden_size, self.num_image), requires_grad=True).cuda()
+        self.g = torch.randn((self.head, self.num_image, self.hidden_size), requires_grad=True).cuda()
+        self.one = torch.ones((self.num_image, 1)).cuda()
         # self.ffn = FeedforwardNeuralNetModel(self.hidden_size, self.hidden_size * 2, self.hidden_size)
         # self.ln = nn.LayerNorm(self.hidden_size)
 
@@ -689,18 +687,24 @@ class MultiHeadRSA(nn.Module):
         value = value.repeat((1,self.head,1,1))
 
         query = query.reshape((-1, 1, self.head, self.hidden_size)).permute(0, 2, 1, 3)
-        key = key.reshape((-1, self.m, self.head, self.hidden_size)).permute(0, 2, 1, 3)
-        value = value.reshape((-1, self.m, self.head, self.hidden_size)).permute(0, 2, 1, 3)
+        key = key.reshape((-1, self.num_image, self.head, self.hidden_size)).permute(0, 2, 1, 3)
+        value = value.reshape((-1, self.num_image, self.head, self.hidden_size)).permute(0, 2, 1, 3)
 
         # basic kernel
-        kernel_v = torch.matmul(self.p, query.permute(0, 1, 3, 2)).reshape(-1, self.head, 1, self.m)
+        kernel_v = torch.matmul(self.p, query.permute(0, 1, 3, 2)).reshape(-1, self.head, 1, self.num_image)
 
         # relational kernel
         q = torch.matmul(self.one, query)
         # q = F.softmax(q)
+        # print('-------------------------')
+        # print(self.one.shape) # (7, 1)              (7, 1)
+        # print(query.shape)    # (16, 7, 1, 768)     (28, 4, 1, 768)
+        # print(q.shape)        # (16, 7, 7, 768)     (28, 4, 7, 768)
+        # print(key.shape)      # (16, 7, 7, 768)     (16, 4, 7, 768)
+        # print('-------------------------')
         x_q = torch.mul(q, key)
-        x_q = x_q.reshape((-1, self.head, 1, self.m * self.hidden_size))
-        kernel_r = torch.matmul(x_q, self.h).reshape(-1, self.head, 1, self.m)
+        x_q = x_q.reshape((-1, self.head, 1, self.num_image * self.hidden_size))
+        kernel_r = torch.matmul(x_q, self.h).reshape(-1, self.head, 1, self.num_image)
         kernel = kernel_v + kernel_r
 
         # basic context
@@ -1041,14 +1045,14 @@ class RecursiveTransformer(nn.Module):
         # TODO : 確認
         video_features : video + textの情報を持つよね？
         """
-        fut_emb_list = video_features[:, 1:8, :].clone()  # (B, 7, 150528)
+        # 画像特徴だけ抽出
+        fut_emb_list = video_features[:, 1:self.cfg.max_v_len-1, :].clone()  # (B, 7, 150528)
         video_features = self.size_adjust(video_features) # (B, 31, 150528) -> (B, 31, 768)
         
         self.pred_reconst = []
         self.gt_rec = []
         # TODO : ここ1こずつじゃなくて一気にできるかな
-        # TODO : videoかえるときに変えないと
-        for idx in range(7):
+        for idx in range(self.cfg.max_v_len-2):
             # self.mlp = resnetを用いた特徴量抽出
             video_features[:, idx+1, :] = self.mlp(fut_emb_list[:, idx, :]).clone()
         
@@ -1056,12 +1060,9 @@ class RecursiveTransformer(nn.Module):
         # rec_feature = video_features[:,1,:].clone()
         # fut_clip = video_features[:,7,:].clone()
 
-        fut_emb_list = video_features[:, 1:8, :].clone()
-        # TODO : 0はCLS tokenじゃない？
-        # Ans  : fut_embでVID部分だけ抜き出しているから0でOK
+        fut_emb_list = video_features[:, 1:self.cfg.max_v_len-1, :].clone()
         rec_tmp = fut_emb_list[:, 0, :].clone()
-        # TODO : 6は逆に5のデータ　== 4.0の画像たよね？
-        fut_clip = fut_emb_list[:, 6, :].clone()
+        fut_clip = fut_emb_list[:, 0, :].clone()
 
         clip_feats = fut_emb_list.clone() # 画像特徴量
 
@@ -1151,6 +1152,9 @@ class RecursiveTransformer(nn.Module):
                 prediction_scores_list[idx].view(-1, self.cfg.vocab_size),
                 input_labels_list[idx].view(-1),
             )
+            """
+            # TODO : 確認 ここの7という値はなに
+            """
             gt_action_list = input_labels_list[idx][:, 7]
             act_score_list = action_score[idx].cpu()
             iwp_loss = 0.0
@@ -1165,12 +1169,12 @@ class RecursiveTransformer(nn.Module):
                     iwp_loss += (1 / 300) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
             clip_loss = 0.0
 
-            clip_loss += self.cliploss(pred_reconst[idx], encoded_outputs_list[idx][0][:, 9:, :])
+            clip_loss += self.cliploss(pred_reconst[idx], encoded_outputs_list[idx][0][:, self.cfg.max_v_len:, :])
             if gt_rec is not None:
                 rec_loss = self.future_loss(pred_reconst[idx].reshape(-1, 16, 16, 3), gt_reconst[idx] / 255.)
-
-            if gt_clip is not None and train:
-                fut_loss += self.future_loss(pred_fut[idx].reshape(-1, 16, 16, 3), gt_fut[idx] / 255.)
+            
+            # if gt_clip is not None and train:
+            #     fut_loss += self.future_loss(pred_fut[idx].reshape(-1, 16, 16, 3), gt_fut[idx] / 255.)
 
             # caption_loss += 0.9 * snt_loss + 1000 * rec_loss + 1 * clip_loss + iwp_loss / 100 + 1 * fut_loss
             caption_loss += 15 * snt_loss + 500 * rec_loss + 4 * clip_loss + iwp_loss / 100
