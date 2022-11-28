@@ -7,11 +7,9 @@ import logging
 import os
 from collections import defaultdict
 from collections.abc import Mapping
-from glob import glob
 from pathlib import Path
 from timeit import default_timer as timer
 from typing import Dict, List, Optional, Tuple, Union
-import sys
 
 import numpy as np
 import torch as th
@@ -307,6 +305,8 @@ class MartTrainer(trainer_base.BaseTrainer):
         val_loader: data.DataLoader,
         test_loader: data.DataLoader,
         datatype: str = "bila",
+        use_wandb: bool = False,
+        show_log: bool = False,
     ) -> None:
         """
         Train epochs until done.
@@ -315,24 +315,17 @@ class MartTrainer(trainer_base.BaseTrainer):
             train_loader: Training dataloader.
             val_loader: Validation dataloader.
         """
-        while(True):
-            # self.wandb_flag = int(input("Use wandb\n Yes: 1, No: 0\n"))
-            # TODO : wandb
-            self.wandb_flag = 0
-            if self.wandb_flag == 1:
-                wandb_name = input("please input project name : ")
-                wandb.init(name=wandb_name, project="mart")
-                break
-            elif self.wandb_flag == 0:
-                break
-            else:
-                continue
-        self.hook_pre_train()  # pre-training hook: time book-keeping etc.
-        self.steps_per_epoch = len(train_loader)  # save length of epoch
-
-        # ---------- Epoch Loop ----------
+        if use_wandb:
+            wandb_name = datatype
+            wandb.init(name=wandb_name, project="BilaS")
+        
+        # time book-keeping etc.
+        self.hook_pre_train(show_log)
+        
+        self.steps_per_epoch = len(train_loader)
         for _epoch in tqdm(range(self.state.current_epoch, self.cfg.train.num_epochs)):
-            self.hook_pre_train_epoch()  # pre-epoch hook: set models to train, time book-keeping
+            # set models to train, time book-keeping
+            self.hook_pre_train_epoch(show_log)
 
             # check exponential moving average
             if (
@@ -342,7 +335,7 @@ class MartTrainer(trainer_base.BaseTrainer):
             ):
                 # use normal parameters for training, not EMA model
                 self.ema.resume(self.model)
-            # summary(self.model, [16, 25, 768])
+            
 
             th.autograd.set_detect_anomaly(True)
 
@@ -355,14 +348,22 @@ class MartTrainer(trainer_base.BaseTrainer):
             batch_rec_loss = 0.0
             batch_clip_loss = 0.0
 
-            # ---------- Data　loader Iteration ----------
-            for step, batch in enumerate(tqdm(train_loader)):
-                self.hook_pre_step_timer()  # hook for step timing
 
-                # ---------- forward pass ----------
+            for step, batch in enumerate(tqdm(train_loader)):
+                # hook for step timing
+                self.hook_pre_step_timer()
+
                 self.optimizer.zero_grad()
                 with autocast(enabled=self.cfg.fp16_train):
-                        # ---------- training step for recurrent models ----------
+                    """
+                    #TODO : 不明
+                    batch <-- train_loader
+                    batchってなにが入っている？
+                    batch : list
+                    len(batch) : 3
+                    この3という数字は何
+                    """
+                    # 各入力をcudaに載せたデータ --> batched_data
                     batched_data = [
                         prepare_batch_inputs(
                             step_data,
@@ -371,11 +372,8 @@ class MartTrainer(trainer_base.BaseTrainer):
                         )
                         for step_data in batch[0]
                     ]
-                    # batch[0][0] == batched_data[0]
-                    # dict_keys(['name', 'input_tokens', 'input_ids', 
-                    #           'input_labels', 'input_mask', 'token_type_ids', 
-                    #           'video_feature', 'gt_clip', 'gt_rec'])
 
+                    # 各データを分割して保持
                     input_ids_list = [e["input_ids"] for e in batched_data] # torch.Size([16, 31])
                     video_features_list = [e["video_feature"] for e in batched_data] # torch.Size([16, 31, 150528])
                     input_masks_list = [e["input_mask"] for e in batched_data] # torch.Size([16, 31])
@@ -384,26 +382,20 @@ class MartTrainer(trainer_base.BaseTrainer):
                     gt_clip = [e["gt_clip"] for e in batched_data] # torch.Size([16, 16, 16, 3])
                     gt_rec = [e["gt_rec"] for e in batched_data] # torch.Size([16, 16, 16, 3])
 
-
                     if self.cfg.debug:
                         cur_data = batched_data[step]
                         self.logger.info(
-                            "input_ids \n{}".format(cur_data["input_ids"][step])
-                        )
+                            "input_ids \n{}".format(cur_data["input_ids"][step]))
                         self.logger.info(
-                            "input_mask \n{}".format(cur_data["input_mask"][step])
-                        )
+                            "input_mask \n{}".format(cur_data["input_mask"][step]))
                         self.logger.info(
                             "input_labels \n{}".format(
-                                cur_data["input_labels"][step]
-                            )
-                        )
+                                cur_data["input_labels"][step]))
                         self.logger.info(
                             "token_type_ids \n{}".format(
-                                cur_data["token_type_ids"][step]
-                            )
-                        )
-                    # ver. future
+                                cur_data["token_type_ids"][step]))
+
+
                     loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                         input_ids_list,
                         video_features_list,
@@ -423,7 +415,6 @@ class MartTrainer(trainer_base.BaseTrainer):
 
                 self.hook_post_forward_step_timer()  # hook for step timing
 
-                # ---------- backward pass ----------
                 grad_norm = None
                 if self.cfg.fp16_train:
                     # with fp16 amp
@@ -477,6 +468,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                     current_lr,
                     additional_log=additional_log,
                     disable_grad_clip=True,
+                    show_log=show_log
                 )
 
             # log train statistics
@@ -502,9 +494,8 @@ class MartTrainer(trainer_base.BaseTrainer):
             if do_val:
                 # run validation including with ground truth tokens and translation without any text
                 _val_loss, _val_score, is_best, _metrics = self.validate_epoch(
-                    val_loader
+                    val_loader, datatype=datatype
                 )
-                # if is_best:
                 print("#############################################")
                 print("Do test")
                 self.test_epoch(test_loader, datatype=datatype)
@@ -531,7 +522,7 @@ class MartTrainer(trainer_base.BaseTrainer):
     # TODO : bilas / bila
     def validate_epoch(
         self, data_loader: data.DataLoader, 
-        datatype: str="bilas"
+        datatype: str="bila"
     ) -> (Tuple[float, float, bool, Dict[str, float]]):
         """
         Run both validation and translation.

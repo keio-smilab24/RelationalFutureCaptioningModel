@@ -373,40 +373,40 @@ class BaseTrainer:
                     # epoch N+1 now. In validation, we are validating on epoch N.
                     self.state.current_epoch += 1
 
-    def hook_pre_train(self) -> None:
+    def hook_pre_train(self, show_log:bool=False) -> None:
         """
         Hook called on training start. Remember start epoch, time the start, log info.
         """
         self.state.start_epoch = self.state.current_epoch
         self.timer_train_start = timer()
-        self.logger.info(f"Training from {self.state.current_epoch} to {self.cfg.train.num_epochs}")
-        self.logger.info("Training Models on devices " + ", ".join([
-            f"{key}: {next(val.parameters()).device}" for key, val in self.model_mgr.model_dict.items()]))
+        if show_log:
+            self.logger.info(f"Training from {self.state.current_epoch} to {self.cfg.train.num_epochs}")
+            self.logger.info("Training Models on devices " + ", ".join([
+                f"{key}: {next(val.parameters()).device}" for key, val in self.model_mgr.model_dict.items()]))
 
-    def hook_post_train(self) -> None:
+    def hook_post_train(self, show_log:bool=False) -> None:
         """
         Hook called on training finish. Log info on total num epochs trained and duration.
         """
-        self.logger.info(f"In total, training {self.state.current_epoch} epochs took "
-                         f"{self.state.time_total:.3f}s ({self.state.time_total - self.state.time_val:.3f}s "
-                         f"train / {self.state.time_val:.3f}s val)")
+        if show_log:
+            self.logger.info(f"In total, training {self.state.current_epoch} epochs took "
+                            f"{self.state.time_total:.3f}s ({self.state.time_total - self.state.time_val:.3f}s "
+                            f"train / {self.state.time_val:.3f}s val)")
 
     # ---------- Public hooks that run every epoch ----------
 
-    def hook_pre_train_epoch(self) -> None:
+    def hook_pre_train_epoch(self, show_log:bool=False) -> None:
         """
         Hook called before training an epoch. Set models to train, times start, reset meters, log info.
         """
-        # set model to train mode
         self.model_mgr.set_all_models_train()
-        # start timers
         self.timer_train_epoch = timer()
         self.timer_step = timer()
         # clear metrics
         self.metrics.hook_epoch_start()
-        # log info
-        self.logger.info(f"{str(datetime.datetime.now()).split('.')[0]} ---------- "
-                         f"Training epoch: {self.state.current_epoch}")
+        if show_log:
+            self.logger.info(f"{str(datetime.datetime.now()).split('.')[0]} ---------- "
+                            f"Training epoch: {self.state.current_epoch}")
 
     def hook_pre_val_epoch(self) -> None:
         """
@@ -504,7 +504,7 @@ class BaseTrainer:
 
     def hook_post_step(
             self, epoch_step: int, loss: th.Tensor, lr: float, additional_log: Optional[str] = None,
-            disable_grad_clip: bool = False) -> bool:
+            disable_grad_clip: bool = False, show_log: bool=False) -> bool:
         """
         Hook called after one optimization step.
 
@@ -548,7 +548,8 @@ class BaseTrainer:
                 f"LR {lr:.1e} L {loss:.4f} ",
                 f"Grad {self.state.last_grad_norm:.3e} " if self.state.last_grad_norm != 0 else "",
                 f"{additional_log}" if additional_log is not None else ""])
-            self.logger.info(print_string)
+            if show_log:
+                self.logger.info(print_string)
 
         # check GPU / RAM profiling
         if ((self.state.epoch_step % self.cfg.logging.step_gpu == 0 and self.cfg.logging.step_gpu > 0) or
@@ -577,9 +578,10 @@ class BaseTrainer:
             if len(load_per) > 1:
                 multi_load = " [" + ", ".join(f"{load:.0%}" for load in load_per) + "]"
                 multi_mem = " [" + ", ".join(f"{mem:.1f}GB" for mem in used_memory_per) + "]"
-            self.logger.info(f"RAM GB used/avail/total: {ram_used:.1f}/{ram_avail:.1f}/{ram_total:.1f} - "
-                             f"GPU {gpu_names_str} Load: {load_avg:.1%}{multi_load} "
-                             f"Mem: {gpu_mem_used:.1f}GB/{gpu_mem_total:.1f}GB{multi_mem}")
+            if show_log:
+                self.logger.info(f"RAM GB used/avail/total: {ram_used:.1f}/{ram_avail:.1f}/{ram_total:.1f} - "
+                                f"GPU {gpu_names_str} Load: {load_avg:.1%}{multi_load} "
+                                f"Mem: {gpu_mem_used:.1f}GB/{gpu_mem_total:.1f}GB{multi_mem}")
 
         # update timings
         other_t = total_step_time - self.timedelta_step_forward - self.timedelta_step_backward

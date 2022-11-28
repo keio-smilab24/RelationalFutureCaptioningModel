@@ -78,7 +78,10 @@ def main():
                                     "to ignore this error.")
             trainer.validate_epoch(val_loader, datatype=args.datatype)
         else:
-            trainer.train_model(train_loader, val_loader, test_loader, datatype=args.datatype)
+            trainer.train_model(
+                    train_loader, val_loader, 
+                    test_loader, datatype=args.datatype,
+                    use_wandb=args.wandb, show_log=args.show_log,)
 
         trainer.close()
         del model

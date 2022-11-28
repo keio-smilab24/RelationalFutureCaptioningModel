@@ -25,6 +25,8 @@ def set_parser():
     parser.add_argument("--load_model", type=str, default=None, help="Load model from file.")
     parser.add_argument("--print_model", action="store_true", help=f"Print model")
     parser.add_argument('--datatype', type=str, default="bila", choices=['bila', 'bilas'])
+    parser.add_argument('--wandb', '-w', action="store_true")
+    parser.add_argument('--show_log', '-l', action="store_true")
 
     return parser.parse_args()
 
