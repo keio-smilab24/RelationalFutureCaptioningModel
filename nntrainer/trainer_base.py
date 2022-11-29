@@ -16,7 +16,8 @@ from torch.nn.utils import clip_grad_norm_
 from torch.optim import Optimizer
 from torch.utils.data.dataloader import DataLoader
 
-from nntrainer import lr_scheduler, metric, models, trainer_configs, utils, utils_torch, utils_yaml
+from utils import utils_yaml
+from nntrainer import lr_scheduler, metric, models, trainer_configs, utils, utils_torch
 from nntrainer.experiment_organization import ExperimentFilesHandler
 from nntrainer.metric import DefaultMetricsConst as Metrics
 from nntrainer.utils import MetricComparisonConst

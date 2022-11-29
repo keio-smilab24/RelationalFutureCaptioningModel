@@ -19,7 +19,6 @@ from torch.utils import data
 from tqdm import tqdm
 
 from datasets.bila import BilaDataset, prepare_batch_inputs
-from coot.configs_retrieval import DataTypesConst, ExperimentTypesConst
 from mart.caption_eval_tools import get_reference_files
 from mart.configs_mart import MartConfig, MartMetersConst as MMeters
 from mart.evaluate_language import evaluate_language_files
@@ -62,12 +61,17 @@ class MartFilesHandler(ExperimentFilesHandler):
         self,
         exp_group: str,
         exp_name: str,
+        exp_type: str,
         run_name: str,
         log_dir: str = TrainerPathConst.DIR_EXPERIMENTS,
         annotations_dir: str = TrainerPathConst.DIR_ANNOTATIONS,
     ):
         super().__init__(
-            ExperimentTypesConst.CAPTION, exp_group, exp_name, run_name, log_dir=log_dir
+            model_type=exp_type,
+            exp_group=exp_group,
+            exp_name=exp_name,
+            run_name=run_name,
+            log_dir=log_dir
         )
         self.annotations_dir = annotations_dir
         self.path_caption = self.path_base / TrainerPathConst.DIR_CAPTION
@@ -148,6 +152,7 @@ class MartTrainer(trainer_base.BaseTrainer):
         model: nn.Module,
         exp_group: str,
         exp_name: str,
+        exp_type: str,
         run_name: str,
         train_loader_length: int,
         *,
@@ -167,11 +172,12 @@ class MartTrainer(trainer_base.BaseTrainer):
 
         # overwrite default experiment files handler
         exp = MartFilesHandler(
-            exp_group,
-            exp_name,
-            run_name,
+            exp_group=exp_group,
+            exp_name=exp_name,
+            exp_type=exp_type,
+            run_name=run_name,
             log_dir=log_dir,
-            annotations_dir=annotations_dir,
+            annotations_dir=annotations_dir
         )
         exp.setup_dirs(reset=reset)
 
@@ -182,7 +188,7 @@ class MartTrainer(trainer_base.BaseTrainer):
             exp_name,
             run_name,
             train_loader_length,
-            ExperimentTypesConst.CAPTION,
+            exp_type,
             log_dir=log_dir,
             log_level=log_level,
             logger=logger,
@@ -682,14 +688,6 @@ class MartTrainer(trainer_base.BaseTrainer):
         reference_file_single = reference_files[0]
 
         # language evaluation
-        """
-        bila:
-            file_translation_raw ; experiments/caption/default/ponnet_100m_coot_clip_mart_run2022-11-23 02:17:37.086785/caption/translations_0_val.json
-            reference_file: annotations/BILA/captioning_val_para.json'
-        bilas
-            file_translation_raw: 同上
-            reference_file: bila_valid(test)_mecab.jsonl
-        """
         res_lang = evaluate_language_files(
             file_translation_raw, reference_files, verbose=False, all_scorer=True, datatype=datatype
         )

@@ -88,7 +88,6 @@ def make_dict(train_caption_file, word2idx_filepath, datatype: str="bila"):
         elif datatype == 'bilas':
             json.dump(word2idx_dict, f, indent=0, ensure_ascii=False)
 
-    return max_words
 
 class BilaDataset(data.Dataset):
     PAD_TOKEN = "[PAD]"  # padding of the whole sequence, note
@@ -117,13 +116,7 @@ class BilaDataset(data.Dataset):
         recurrent: bool=True,
         untied: bool=False,
         video_feature_dir: Optional[str] = None,
-        coot_model_name=None,
-        coot_mode: str="all",
-        coot_dim_vid: int=768,
-        coot_dim_clip: int=384,
         annotations_dir: str = "data",
-        coot_feat_dir: str="provided_embeddings",
-        dataset_max: Optional[int] = None,
         preload: bool = False,
         datatype: str = "bilas",
     ):
@@ -136,28 +129,15 @@ class BilaDataset(data.Dataset):
         elif datatype == 'bilas':
             self.annotations_dir = Path('data/BilaS/')
 
-        # COOT feature settings
-        """
-        #TODO : 確認 
-        # cootのこの4つ使用していない
-        """
-        # self.coot_model_name = coot_model_name # yc2_100m_coot
-        # self.coot_mode = coot_mode  # clip
-        # self.coot_dim_vid = coot_dim_vid # 768
-        self.coot_dim_clip = coot_dim_clip # 150528
-        # self.coot_feat_dir = Path(coot_feat_dir) # PosixPath('provided_embeddings')
-
         # Video feature settings
-        duration_file = "captioning_video_feat_duration.csv"
         self.video_feature_dir = Path(video_feature_dir) / self.dataset_name # data/mart_video_feature/BILA
-        self.duration_file = self.annotations_dir / self.dataset_name / duration_file # annotations/BILA/captioning_video_feat_duration.csv'
         self.num_images = max_v_len - 2
 
         # Parameters for sequence lengths
-        self.max_seq_len = max_v_len + max_t_len # 31
-        self.max_v_len = max_v_len  # 9
-        self.max_t_len = max_t_len  # 22
-        self.max_n_sen = max_n_sen  # 12
+        self.max_seq_len = max_v_len + max_t_len
+        self.max_v_len = max_v_len
+        self.max_t_len = max_t_len
+        self.max_n_sen = max_n_sen
 
         # Train or val mode
         self.mode = mode        # train
@@ -206,7 +186,7 @@ class BilaDataset(data.Dataset):
             self.word2idx_file = Path(self.annotations_dir, "ponnet_word2idx.json")
         
         if not os.path.exists(self.word2idx_file):
-            max_words = make_dict(data_path, self.word2idx_file, datatype)
+            make_dict(data_path, self.word2idx_file, datatype)
         
         self.word2idx = json.load(self.word2idx_file.open("rt", encoding="utf8")) # 辞書 {word : ID(int)}
         self.idx2word = {int(v): k for k, v in list(self.word2idx.items())} # 逆
@@ -430,32 +410,6 @@ class BilaDataset(data.Dataset):
         
         return data, meta
 
-    def _get_vt_features(
-        self,
-        video_feat_tuple: torch.Tensor,
-        max_v_l: int,
-    ):
-        """
-        Summary:
-            ひとまとめにしてあるimage関連の特徴量から、将来(4.2s)の画像を抽出
-        Args:
-            video_feat_tuple (torch.Tensor) : 
-            max_v_l (int) : 
-        """
-        """
-        # TODO : memo
-        max_v_l : 1
-        self.coot_dim_clip : (1, 150528)
-        feat.shape : (1, 150528)
-        valid_l = 1
-        """
-        
-        valid_l = 0
-        feat = np.zeros((max_v_l, self.coot_dim_clip))
-        feat[valid_l] = video_feat_tuple
-        valid_l += 1
-        return feat, valid_l
-
 
     def _load_indexed_video_feature(
         self,
@@ -628,13 +582,7 @@ def create_datasets_and_loaders(
         recurrent=cfg.recurrent,
         untied=cfg.untied or cfg.mtrans,
         video_feature_dir=video_feature_dir,
-        coot_model_name=cfg.coot_model_name,
-        coot_mode=cfg.coot_mode,
-        coot_dim_vid=cfg.coot_dim_vid,
-        coot_dim_clip=cfg.coot_dim_clip,
         annotations_dir=annotations_dir,
-        coot_feat_dir=coot_feat_dir,
-        dataset_max=cfg.dataset_train.max_datapoints,
         preload=cfg.dataset_train.preload,
         datatype=datatype,
     )
@@ -650,13 +598,7 @@ def create_datasets_and_loaders(
         recurrent=cfg.recurrent,
         untied=cfg.untied or cfg.mtrans,
         video_feature_dir=video_feature_dir,
-        coot_model_name=cfg.coot_model_name,
-        coot_mode=cfg.coot_mode,
-        coot_dim_vid=cfg.coot_dim_vid,
-        coot_dim_clip=cfg.coot_dim_clip,
         annotations_dir=annotations_dir,
-        coot_feat_dir=coot_feat_dir,
-        dataset_max=cfg.dataset_val.max_datapoints,
         preload=cfg.dataset_val.preload,
         datatype=datatype,
     )
@@ -686,13 +628,7 @@ def create_datasets_and_loaders(
         recurrent=cfg.recurrent,
         untied=cfg.untied or cfg.mtrans,
         video_feature_dir=video_feature_dir,
-        coot_model_name=cfg.coot_model_name,
-        coot_mode=cfg.coot_mode,
-        coot_dim_vid=cfg.coot_dim_vid,
-        coot_dim_clip=cfg.coot_dim_clip,
         annotations_dir=annotations_dir,
-        coot_feat_dir=coot_feat_dir,
-        dataset_max=cfg.dataset_val.max_datapoints,
         preload=cfg.dataset_val.preload,
         datatype=datatype,
     )

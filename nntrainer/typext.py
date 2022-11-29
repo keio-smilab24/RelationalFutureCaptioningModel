@@ -108,7 +108,7 @@ class SaveableBaseModel(BaseModel):
 
 # ---------- TypedNamedTuple: Class for explicit data modeling. ----------
 
-def _nested_shape_check(field_name: str, tensor_container: Any, shape: [List[Optional[int]]]) -> None:
+def _nested_shape_check(field_name: str, tensor_container: Any, shape) -> None:
     """
     Check if input tensor matches the given shape. If input is iterable or mapping, recurse into it and check
     if all contained tensors match the given shape.

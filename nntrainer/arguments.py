@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import repo_config
 from nntrainer.utils import TrainerPathConst
 
 
@@ -349,11 +348,11 @@ def update_path_from_args(args: argparse.Namespace) -> Path:
     Returns:
         Root path to data.
     """
-    path_data = args.data_path if args.data_path is not None else repo_config.DATA_PATH
+    path_data = args.data_path if args.data_path is not None else args.dpath
     return Path(path_data)
 
 
-def setup_experiment_identifier_from_args(args: argparse.Namespace, exp_type: str) -> Tuple[str, str, str]:
+def setup_experiment_identifier_from_args(args: argparse.Namespace) -> Tuple[str, str, str]:
     """
     Summary:
         実験の各種設定を返す関数
@@ -368,17 +367,19 @@ def setup_experiment_identifier_from_args(args: argparse.Namespace, exp_type: st
     if args.config_file is None:
         exp_group = args.exp_group
         exp_name = args.exp_name
+        exp_type = args.exp_type
         config_file = setup_default_yaml_file(exp_name, config_dir=args.config_dir)
     
     else:
         exp_group = args.exp_group
         exp_name = ".".join(str(Path(args.config_file).parts[-1]).split(".")[:-1])
+        exp_type = args.exp_type
         config_file = args.config_file
     
     print(f"Source config: {config_file}")
     print(f"Results path:  {args.log_dir}/{exp_type}/{exp_group}/{exp_name}")
     
-    return exp_group, exp_name, config_file
+    return exp_group, exp_name, exp_type, config_file
 
 
 def setup_default_yaml_file(

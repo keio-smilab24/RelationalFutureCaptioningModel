@@ -10,32 +10,28 @@ import shutil
 import datetime
 import numpy as np
 
-from coot.configs_retrieval import ExperimentTypesConst
+from models.model import create_mart_model
 from datasets.bila import create_datasets_and_loaders
-from mart import arguments_mart
-from mart.configs_mart import MartConfig as Config
-from mart.model import create_mart_model
-from mart.trainer_caption import MartTrainer
-from nntrainer import arguments, utils
-from nntrainer.utils_torch import set_seed
-from nntrainer.utils_yaml import load_yaml_config_file
-from utils.arguments import set_parser
+from utils.utils_yaml import load_yaml_config_file
 from utils.utils import fix_seed
+from utils.arguments import update_mart_config_from_args, set_parser, update_config_from_args
+from utils.setting import setup_experiment_identifier_from_args
 
-
-EXP_TYPE = ExperimentTypesConst.CAPTION
+from mart.configs_mart import MartConfig as Config
+from mart.trainer_caption import MartTrainer
+from nntrainer.utils_torch import set_seed
 
 
 def main():
     args = set_parser()
 
     # load repository config yaml file to dict
-    exp_group, exp_name, config_file = arguments.setup_experiment_identifier_from_args(args, EXP_TYPE)
+    exp_group, exp_name, exp_type, config_file = setup_experiment_identifier_from_args(args)
     config = load_yaml_config_file(config_file)
 
     # update experiment config given the script arguments
-    config = arguments.update_config_from_args(config, args)
-    config = arguments_mart.update_mart_config_from_args(config, args)
+    config = update_config_from_args(config, args)
+    config = update_mart_config_from_args(config, args)
 
     # read experiment config dict
     cfg = Config(config)
@@ -68,7 +64,7 @@ def main():
         load_best = args.load_best or args.validate
 
         trainer = MartTrainer(
-            cfg, model, exp_group, exp_name, run_name, len(train_loader), log_dir=args.log_dir,
+            cfg, model, exp_group, exp_name, exp_type, run_name, len(train_loader), log_dir=args.log_dir,
             log_level=args.log_level, logger=None, print_graph=args.print_graph, reset=args.reset, load_best=load_best,
             load_epoch=args.load_epoch, load_model=args.load_model, inference_only=args.validate,
             annotations_dir=args.data_dir)

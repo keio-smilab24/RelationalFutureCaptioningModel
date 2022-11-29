@@ -54,8 +54,6 @@ def create_shared_array(arr: np.ndarray, dtype: str = "float") -> np.array:
     return shared_array
 
 
-# ---------- Random ----------
-
 def set_seed(seed: int, cudnn_deterministic: bool = False, cudnn_benchmark: bool = True):
     """
     Set all relevant seeds for torch, numpy and python
