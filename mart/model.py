@@ -660,26 +660,8 @@ class MultiHeadRSA(nn.Module):
         self.h = torch.randn((self.head, self.num_image * self.hidden_size, self.num_image), requires_grad=True).cuda()
         self.g = torch.randn((self.head, self.num_image, self.hidden_size), requires_grad=True).cuda()
         self.one = torch.ones((self.num_image, 1)).cuda()
-        # self.ffn = FeedforwardNeuralNetModel(self.hidden_size, self.hidden_size * 2, self.hidden_size)
-        # self.ln = nn.LayerNorm(self.hidden_size)
 
     def forward(self, target, cont):
-        # batch_size = target.size()[0]
-        # query = torch.zeros((batch_size, self.head, self.tmp_size)).cuda()
-        # # print("query", query.shape)
-        # for idx in range(self.head):
-        #     if(idx < self.num_img):
-        #         tmp_query = self.query_layer(target[:,idx,:])
-        #         # print("tmp", tmp_query.shape)
-        #         # print("query_idx", query[:,idx,:].shape)
-        #         query[:,idx,:] = tmp_query
-        #     else:
-        #         new_idx = idx
-        #         while(new_idx >= self.num_img):
-        #             new_idx -= self.num_img
-        #         tmp_query = self.query_layer(target[:,new_idx,:])
-        #         query[:,idx,:] = tmp_query
-
         query = self.query_layer(target)
         key = self.key_layer(cont).reshape(-1, 1, self.head, self.hidden_size)
         key = key.repeat((1,self.head,1,1))
@@ -695,20 +677,10 @@ class MultiHeadRSA(nn.Module):
 
         # relational kernel
         q = torch.matmul(self.one, query)
-        # q = F.softmax(q)
-        # print('-------------------------')
-        # print(self.one.shape) # (7, 1)              (7, 1)
-        # print(query.shape)    # (16, 7, 1, 768)     (28, 4, 1, 768)
-        # print(q.shape)        # (16, 7, 7, 768)     (28, 4, 7, 768)
-        # print(key.shape)      # (16, 7, 7, 768)     (16, 4, 7, 768)
-        # print('-------------------------')
         x_q = torch.mul(q, key)
         x_q = x_q.reshape((-1, self.head, 1, self.num_image * self.hidden_size))
         kernel_r = torch.matmul(x_q, self.h).reshape(-1, self.head, 1, self.num_image)
         kernel = kernel_v + kernel_r
-
-        # basic context
-        # basic_cont = context.clone()
 
         # relational context
         xg = value.clone()
@@ -718,9 +690,6 @@ class MultiHeadRSA(nn.Module):
         context = x_nr + value
 
         output = torch.matmul(kernel, context).reshape(-1, self.head, self.hidden_size)
-        # output = F.softmax(output)
-        # output = self.ln(output)
-        # output = self.ffn(output)
         return output
 
 
@@ -1078,7 +1047,6 @@ class RecursiveTransformer(nn.Module):
         token_type_ids_list,
         input_labels_list,
         gt_rec=None,
-        train = False,
     ):
         """
         Args:

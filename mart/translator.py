@@ -24,9 +24,9 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from datasets.bila import BilaDataset as RCDataset
 from mart.beam_search import BeamSearch
 from mart.configs_mart import MartConfig
-from mart.recursive_caption_dataset import RecursiveCaptionDataset as RCDataset
 from nntrainer import utils
 
 

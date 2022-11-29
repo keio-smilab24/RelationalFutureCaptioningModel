@@ -428,7 +428,7 @@ class TrainerPathConst(typext.ConstantHolder):
     tores directory and file names for training.
     """
     DIR_CONFIG = "config"
-    DIR_EXPERIMENTS = "experiments"
+    DIR_EXPERIMENTS = "results"
     DIR_LOGS = "logs"
     DIR_MODELS = "models"
     DIR_METRICS = "metrics"
@@ -436,7 +436,7 @@ class TrainerPathConst(typext.ConstantHolder):
     DIR_TB = "tb"
     DIR_PROFILING = "profiling"
     DIR_CAPTION = "caption"
-    DIR_ANNOTATIONS = "annotations"
+    DIR_ANNOTATIONS = "data"
     FILE_PREFIX_TRAINERSTATE = "trainerstate"
     FILE_PREFIX_MODEL = "model"
     FILE_PREFIX_MODELEMA = "modelema"

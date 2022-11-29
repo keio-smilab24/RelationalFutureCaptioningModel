@@ -90,7 +90,7 @@ def make_dict(train_caption_file, word2idx_filepath, datatype: str="bila"):
 
     return max_words
 
-class RecursiveCaptionDataset(data.Dataset):
+class BilaDataset(data.Dataset):
     PAD_TOKEN = "[PAD]"  # padding of the whole sequence, note
     CLS_TOKEN = "[CLS]"  # leading token of the joint sequence
     SEP_TOKEN = "[SEP]"  # a separator for video and text
@@ -121,7 +121,7 @@ class RecursiveCaptionDataset(data.Dataset):
         coot_mode: str="all",
         coot_dim_vid: int=768,
         coot_dim_clip: int=384,
-        annotations_dir: str = "annotations",
+        annotations_dir: str = "data",
         coot_feat_dir: str="provided_embeddings",
         dataset_max: Optional[int] = None,
         preload: bool = False,
@@ -233,7 +233,6 @@ class RecursiveCaptionDataset(data.Dataset):
                 coll_data.append(raw_data)
         
         self.data = coll_data
-        # {'clip_data': xxx, 'sentence': yyy}
 
         # ---------- Load video data ----------
 
@@ -256,7 +255,8 @@ class RecursiveCaptionDataset(data.Dataset):
         self.preloading_done = False
 
     def __len__(self):
-        return len(self.data)
+        # return len(self.data)
+        return int(len(self.data)/20)
 
     def __getitem__(self, index):
         items, meta = self.convert_example_to_features(self.data[index])
@@ -282,17 +282,18 @@ class RecursiveCaptionDataset(data.Dataset):
             interval   : bilaデータセットにおいて各画像の差分時間
         """
         if self.datatype == "bila":
+            data_dir = os.path.join("data", "BILA", "ponnet_data")
             frame = base_frame
             
             img_list = []
             for _ in range(min(self.num_images,6)):
                 frame -= interval
-                img_path = os.path.join("ponnet_data", f"{frame:.1f}s_center_frames", raw_name+".png")
+                img_path = os.path.join(data_dir, f"{frame:.1f}s_center_frames", raw_name+".png")
                 img = torch.from_numpy(cv2.imread(img_path).astype(np.float32)).clone()
                 img = img.reshape(-1, 150528)
                 img_list.insert(0, img)
             
-            rec_img = cv2.imread(os.path.join("ponnet_data", f"{frame:.1f}s_center_frames", raw_name+".png"))
+            rec_img = cv2.imread(os.path.join(data_dir, f"{frame:.1f}s_center_frames", raw_name+".png"))
             rec_img = cv2.resize(rec_img, dsize=(16, 16))
 
         elif self.datatype == "bilas":
@@ -561,7 +562,7 @@ class RecursiveCaptionDataset(data.Dataset):
             batch[0][0]
         )  # doesn"t matter which one is used
         padding_clip_sen_data["input_labels"][:] =\
-            RecursiveCaptionDataset.IGNORE
+            BilaDataset.IGNORE
         for ele in batch:
             cur_n_sen = len(ele)
             if cur_n_sen < max_n_sen:
@@ -607,18 +608,18 @@ def step_collate(padded_batch_step):
     return c_batch
 
 
-def create_mart_datasets_and_loaders(
+def create_datasets_and_loaders(
     cfg: MartConfig,
     coot_feat_dir: str = MartPathConst.COOT_FEAT_DIR,
     annotations_dir: str = MartPathConst.ANNOTATIONS_DIR,
     video_feature_dir: str = MartPathConst.VIDEO_FEATURE_DIR,
     datatype: str = 'bila',
 ) -> Tuple[
-    RecursiveCaptionDataset, RecursiveCaptionDataset, data.DataLoader, data.DataLoader
+    BilaDataset, BilaDataset, data.DataLoader, data.DataLoader
 ]:
     # create the dataset
     dset_name_train = cfg.dataset_train.name
-    train_dataset = RecursiveCaptionDataset(
+    train_dataset = BilaDataset(
         dset_name_train,
         cfg.max_t_len,
         cfg.max_v_len,
@@ -640,7 +641,7 @@ def create_mart_datasets_and_loaders(
     # add 10 at max_n_sen to make the inference stage use all the segments
     # max_n_sen_val = cfg.max_n_sen + 10
     max_n_sen_val = cfg.max_n_sen
-    val_dataset = RecursiveCaptionDataset(
+    val_dataset = BilaDataset(
         cfg.dataset_val.name,
         cfg.max_t_len,
         cfg.max_v_len,
@@ -676,7 +677,7 @@ def create_mart_datasets_and_loaders(
         num_workers=cfg.dataset_val.num_workers,
         pin_memory=cfg.dataset_val.pin_memory,
     )
-    test_dataset = RecursiveCaptionDataset(
+    test_dataset = BilaDataset(
         cfg.dataset_val.name,
         cfg.max_t_len,
         cfg.max_v_len,

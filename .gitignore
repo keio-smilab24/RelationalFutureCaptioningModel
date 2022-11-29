@@ -19,6 +19,9 @@ data/
 
 # ----- BilaS ------
 .vscode/
+NotUse/
+*_old/
+results/
 
 
 # ---------- general

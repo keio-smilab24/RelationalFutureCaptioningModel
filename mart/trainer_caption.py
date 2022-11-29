@@ -12,12 +12,13 @@ from timeit import default_timer as timer
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import torch as th
+import torch
 from torch import nn
 from torch.cuda.amp import autocast
 from torch.utils import data
 from tqdm import tqdm
 
+from datasets.bila import BilaDataset, prepare_batch_inputs
 from coot.configs_retrieval import DataTypesConst, ExperimentTypesConst
 from mart.caption_eval_tools import get_reference_files
 from mart.configs_mart import MartConfig, MartMetersConst as MMeters
@@ -25,7 +26,6 @@ from mart.evaluate_language import evaluate_language_files
 from mart.evaluate_repetition import evaluate_repetition_files
 from mart.evaluate_stats import evaluate_stats_files
 from mart.optimization import BertAdam, EMA
-from mart.recursive_caption_dataset import RecursiveCaptionDataset, prepare_batch_inputs
 from mart.translator import Translator
 from nntrainer import trainer_base
 from nntrainer.experiment_organization import ExperimentFilesHandler
@@ -43,7 +43,7 @@ import wandb
 def cal_performance(pred, gold):
     pred = pred.max(2)[1].contiguous().view(-1)
     gold = gold.contiguous().view(-1)
-    valid_label_mask = gold.ne(RecursiveCaptionDataset.IGNORE)
+    valid_label_mask = gold.ne(BilaDataset.IGNORE)
     pred_correct_mask = pred.eq(gold)
     n_correct = pred_correct_mask.masked_select(valid_label_mask).sum().item()
     return n_correct
@@ -74,14 +74,11 @@ class MartFilesHandler(ExperimentFilesHandler):
 
     def get_translation_files(self, epoch: Union[int, str], split: str) -> Path:
         """
-        Get all file paths for storing translation results and evaluation.
-
+        Summary:
+            生成文・gt文の保存先のpathを返す
         Args:
             epoch: Epoch.
             split: dataset split (val, test)
-
-        Returns:
-            Path to store raw model output and ground truth.
         """
         return (
             self.path_caption
@@ -286,7 +283,7 @@ class MartTrainer(trainer_base.BaseTrainer):
             # reload EMA weights from checkpoint (the shadow) and save the model parameters (the original)
             ema_file = self.exp.get_models_file_ema(self.load_ep)
             self.logger.info(f"Update EMA from {ema_file}")
-            self.ema.set_state_dict(th.load(str(ema_file)))
+            self.ema.set_state_dict(torch.load(str(ema_file)))
             self.ema.assign(self.model, update_model=False)
 
         # disable ema when loading model directly or when decay is 0 / -1
@@ -308,13 +305,6 @@ class MartTrainer(trainer_base.BaseTrainer):
         use_wandb: bool = False,
         show_log: bool = False,
     ) -> None:
-        """
-        Train epochs until done.
-
-        Args:
-            train_loader: Training dataloader.
-            val_loader: Validation dataloader.
-        """
         if use_wandb:
             wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}"
             wandb.init(name=wandb_name, project="BilaS")
@@ -337,7 +327,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                 self.ema.resume(self.model)
             
 
-            th.autograd.set_detect_anomaly(True)
+            torch.autograd.set_detect_anomaly(True)
 
             total_loss = 0
             n_word_total = 0
@@ -348,22 +338,13 @@ class MartTrainer(trainer_base.BaseTrainer):
             batch_rec_loss = 0.0
             batch_clip_loss = 0.0
 
-
             for step, batch in enumerate(tqdm(train_loader)):
                 # hook for step timing
                 self.hook_pre_step_timer()
 
                 self.optimizer.zero_grad()
                 with autocast(enabled=self.cfg.fp16_train):
-                    """
-                    #TODO : 不明
-                    batch <-- train_loader
-                    batchってなにが入っている？
-                    batch : list
-                    len(batch) : 3
-                    この3という数字は何
-                    """
-                    # 各入力をcudaに載せたデータ --> batched_data
+                    # 各入力をcudaに載せる
                     batched_data = [
                         prepare_batch_inputs(
                             step_data,
@@ -374,12 +355,12 @@ class MartTrainer(trainer_base.BaseTrainer):
                     ]
 
                     # 各データを分割して保持
-                    input_ids_list = [e["input_ids"] for e in batched_data] # torch.Size([16, 31])
-                    video_features_list = [e["video_feature"] for e in batched_data] # torch.Size([16, 31, 150528])
-                    input_masks_list = [e["input_mask"] for e in batched_data] # torch.Size([16, 31])
-                    token_type_ids_list = [e["token_type_ids"] for e in batched_data] # # torch.Size([16, 31])
-                    input_labels_list = [e["input_labels"] for e in batched_data] # # torch.Size([16, 31])
-                    gt_rec = [e["gt_rec"] for e in batched_data] # torch.Size([16, 16, 16, 3])
+                    input_ids_list = [e["input_ids"] for e in batched_data]
+                    video_features_list = [e["video_feature"] for e in batched_data]
+                    input_masks_list = [e["input_mask"] for e in batched_data]
+                    token_type_ids_list = [e["token_type_ids"] for e in batched_data]
+                    input_labels_list = [e["input_labels"] for e in batched_data]
+                    gt_rec = [e["gt_rec"] for e in batched_data]
 
                     if self.cfg.debug:
                         cur_data = batched_data[step]
@@ -402,7 +383,6 @@ class MartTrainer(trainer_base.BaseTrainer):
                         token_type_ids_list,
                         input_labels_list,
                         gt_rec,
-                        train = True
                     )
                     self.train_steps += 1
                     num_steps += 1
@@ -445,7 +425,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                 n_word = 0
                 for pred, gold in zip(pred_scores_list, input_labels_list):
                     n_correct += cal_performance(pred, gold)
-                    valid_label_mask = gold.ne(RecursiveCaptionDataset.IGNORE)
+                    valid_label_mask = gold.ne(BilaDataset.IGNORE)
                     n_word += valid_label_mask.sum().item()
                 n_word_total += n_word
                 n_word_correct += n_correct
@@ -501,7 +481,7 @@ class MartTrainer(trainer_base.BaseTrainer):
 
             # save the EMA weights
             ema_file = self.exp.get_models_file_ema(self.state.current_epoch)
-            th.save(self.ema.state_dict(), str(ema_file))
+            torch.save(self.ema.state_dict(), str(ema_file))
 
             # post-epoch hook: scheduler, save checkpoint, time bookkeeping, feed tensorboard
             self.hook_post_train_and_val_epoch(do_val, is_best)
@@ -516,7 +496,7 @@ class MartTrainer(trainer_base.BaseTrainer):
         )
 
 
-    @th.no_grad()
+    @torch.no_grad()
     # TODO : bilas / bila
     def validate_epoch(
         self, data_loader: data.DataLoader, 
@@ -563,7 +543,7 @@ class MartTrainer(trainer_base.BaseTrainer):
             "results": defaultdict(list),
             "external_data": {"used": "true", "details": "ay"},
         }
-        dataset: RecursiveCaptionDataset = data_loader.dataset
+        dataset: BilaDataset = data_loader.dataset
 
         # ---------- Dataloader Iteration ----------
         num_steps = 0
@@ -648,7 +628,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                 n_word = 0
                 for pred, gold in zip(pred_scores_list, input_labels_list):
                     n_correct += cal_performance(pred, gold)
-                    valid_label_mask = gold.ne(RecursiveCaptionDataset.IGNORE)
+                    valid_label_mask = gold.ne(BilaDataset.IGNORE)
                     n_word += valid_label_mask.sum().item()
 
                 # calculate metrix
@@ -816,7 +796,7 @@ class MartTrainer(trainer_base.BaseTrainer):
         return total_loss, val_score, is_best, flat_metrics
 
 
-    @th.no_grad()
+    @torch.no_grad()
     def test_epoch(
         self,
         data_loader: data.DataLoader,
@@ -858,7 +838,7 @@ class MartTrainer(trainer_base.BaseTrainer):
             "results": defaultdict(list),
             "external_data": {"used": "true", "details": "ay"},
         }
-        dataset: RecursiveCaptionDataset = data_loader.dataset
+        dataset: BilaDataset = data_loader.dataset
 
         # ---------- Dataloader Iteration ----------
         num_steps = 0
@@ -946,7 +926,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                 n_word = 0
                 for pred, gold in zip(pred_scores_list, input_labels_list):
                     n_correct += cal_performance(pred, gold)
-                    valid_label_mask = gold.ne(RecursiveCaptionDataset.IGNORE)
+                    valid_label_mask = gold.ne(BilaDataset.IGNORE)
                     n_word += valid_label_mask.sum().item()
 
                 # calculate metrix

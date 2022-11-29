@@ -355,24 +355,22 @@ def update_path_from_args(args: argparse.Namespace) -> Path:
 
 def setup_experiment_identifier_from_args(args: argparse.Namespace, exp_type: str) -> Tuple[str, str, str]:
     """
-    Determine the experiment identifier (Group, name, config file) either from group and name or from config file path.
+    Summary:
+        実験の各種設定を返す関数
 
     Args:
         args: Arguments.
         exp_type: Experiment type.
 
     Returns:
-        Tuple of group, name, config file.
+        group, name, config file.
     """
     if args.config_file is None:
-        # no path to config file given, determine from experiment identifier
         exp_group = args.exp_group
         exp_name = args.exp_name
-        config_file = setup_config_file_from_experiment_identifier(
-            exp_type, exp_group, exp_name, config_dir=args.config_dir)
+        config_file = setup_default_yaml_file(exp_name, config_dir=args.config_dir)
     
     else:
-        # path to config file given, determine experiment name from config file name (without file type)
         exp_group = args.exp_group
         exp_name = ".".join(str(Path(args.config_file).parts[-1]).split(".")[:-1])
         config_file = args.config_file
@@ -383,18 +381,19 @@ def setup_experiment_identifier_from_args(args: argparse.Namespace, exp_type: st
     return exp_group, exp_name, config_file
 
 
-def setup_config_file_from_experiment_identifier(
-        exp_type: str, exp_group: str, exp_name: str, *, config_dir: str = TrainerPathConst.DIR_CONFIG) -> Path:
+def setup_default_yaml_file(
+        exp_name: str, config_dir: str = TrainerPathConst.DIR_CONFIG) -> Path:
     """
-    Given the identifier parts, return Path to config yaml file.
+    Summary:
+        config fileが与えられなかったときに、
+        defaultのyamlファイルへのpathを返す
 
     Args:
-        exp_type: Experiment type
-        exp_group: Experiment group
-        exp_name: Experiment name
-        config_dir: Config directory
+        config_dir: Config directory :(config)
+        exp_name: Experiment name    :(default)
 
     Returns:
         Path to config yaml.
+        config/exp_name.yaml
     """
-    return Path(config_dir) / exp_type / exp_group / f"{exp_name}.yaml"
+    return Path(config_dir, f"{exp_name}.yaml")

@@ -130,7 +130,7 @@ def add_mart_setting(parser: argparse.ArgumentParser) -> None:
         help="COOT Embeddings dir.",
     )
     parser.add_argument(
-        "--annotations_dir", type=str, default="annotations", help="Annotations dir."
+        "--data_dir", type=str, default="data", help="Annotations dir."
     )
     parser.add_argument(
         "--video_feature_dir",
