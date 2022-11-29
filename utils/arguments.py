@@ -1,6 +1,6 @@
 import argparse
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 # TODO :
 from nntrainer.utils import TrainerPathConst

@@ -6,12 +6,13 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 from torch import nn
+import torchvision.models as models
 
-from mart.configs_mart import MartConfig, MartPathConst
-from mart.loss_caption import LabelSmoothingLoss
+from losses.loss import LabelSmoothingLoss
+from utils.configs import MartConfig, MartPathConst
+
 from nntrainer.utils_torch import count_parameters
 
-import torchvision.models as models
 
 
 logger = logging.getLogger(__name__)

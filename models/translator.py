@@ -25,8 +25,8 @@ import torch.nn.functional as F
 from torch import nn
 
 from datasets.bila import BilaDataset as RCDataset
-from mart.beam_search import BeamSearch
-from mart.configs_mart import MartConfig
+from utils.configs import MartConfig
+from models.beam_search import BeamSearch
 from nntrainer import utils
 
 

@@ -50,50 +50,22 @@ def evaluate_stats_files(
 ) -> Dict[str, Any]:
     """
     Get vocab size, average length, etc
-    
-    bila
-        submission_file: experiments/.../caption/translations_0_test.json
-        ref_file: annotations/BILA/captioning_test_para.json
-    bilas
-        submisiion_file: experiments/...caption/translations_0_val.json
-        ref_file : data/BilaS/caption_valid.json
     """
     # load data
     sub_data = json.load(open(submission_file, "r"))
     ref_data = json.load(open(reference_file, "r"))
-    # print('------------ sub-data ---------')
-    # print(sub_data)
-    # print('--------- ref data ---------------')
-    # print(ref_data)
-    # print('--------- bf ------------------')
     sub_data = sub_data["results"] if "results" in sub_data else sub_data
     ref_data = ref_data["results"] if "results" in ref_data else ref_data
-    # print('##### sub_data.items() ######')
-    # print(sub_data.items())
-    # print('-------------------------------------')
-    # print(list(sub_data.items())[0])
-    # print('----------------- ##### --------------')
     if datatype == "bila":
         sub_data = {k: v for k, v in list(sub_data.items()) if k in ref_data}
     elif datatype == 'bilas':
         sub_data = {k: v for k, v in list(sub_data.items()) if k in ref_data}
 
-    # print('------- sub_data --------')
-    # print(sub_data)
-    # print('--------------------------')
-
     submission_data_entries = [
         item for sublist in list(sub_data.values()) for item in sublist
     ]
-    # print('-------- submission_data_ent --------')
-    # print(submission_data_entries)
 
     submission_sentences = [e["sentence"] for e in submission_data_entries]
-    # print('------- submission data entries-------')
-    # print(submission_data_entries)
-    # print('------- submission sentences -------')
-    # print(submission_sentences)
-    # print('---------------------------------')
     submission_stat = get_sen_stat(submission_sentences)
 
     if verbose:

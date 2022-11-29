@@ -18,9 +18,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from mart.configs_mart import MartConfig
-from mart.loss_caption import LabelSmoothingLoss
-
+from losses.loss import LabelSmoothingLoss
+from utils.configs import MartConfig
 
 INF = 1e10
 

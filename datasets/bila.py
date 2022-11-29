@@ -16,7 +16,8 @@ from torch.utils.data.dataloader import default_collate
 from tqdm import tqdm
 import cv2
 
-from mart.configs_mart import MartConfig, MartPathConst
+from utils.configs import MartConfig, MartPathConst
+
 from nntrainer.typext import ConstantHolder
 
 
@@ -564,7 +565,6 @@ def step_collate(padded_batch_step):
 
 def create_datasets_and_loaders(
     cfg: MartConfig,
-    coot_feat_dir: str = MartPathConst.COOT_FEAT_DIR,
     annotations_dir: str = MartPathConst.ANNOTATIONS_DIR,
     video_feature_dir: str = MartPathConst.VIDEO_FEATURE_DIR,
     datatype: str = 'bila',

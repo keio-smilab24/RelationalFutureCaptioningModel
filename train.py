@@ -10,15 +10,15 @@ import shutil
 import datetime
 import numpy as np
 
+from trainer import MartTrainer
 from models.model import create_mart_model
 from datasets.bila import create_datasets_and_loaders
 from utils.utils_yaml import load_yaml_config_file
 from utils.utils import fix_seed
 from utils.arguments import update_mart_config_from_args, set_parser, update_config_from_args
 from utils.setting import setup_experiment_identifier_from_args
+from utils.configs import MartConfig as Config
 
-from mart.configs_mart import MartConfig as Config
-from mart.trainer_caption import MartTrainer
 from nntrainer.utils_torch import set_seed
 
 
@@ -49,7 +49,7 @@ def main():
 
     # create dataset
     train_set, _, train_loader, val_loader, _, test_loader = create_datasets_and_loaders(
-        cfg, args.coot_feat_dir, args.data_dir, args.video_feature_dir, datatype=args.datatype)
+        cfg, args.data_dir, args.video_feature_dir, datatype=args.datatype)
 
     for i in range(args.start_run):
         run_number = datetime.datetime.now()
