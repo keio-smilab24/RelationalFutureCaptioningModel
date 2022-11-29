@@ -5,6 +5,8 @@ Originally published by https://github.com/jayleicn/recurrent-transformer under 
 Reworked by https://github.com/gingsi/coot-videotext under Apache 2 license
 """
 
+import os
+import shutil
 import numpy as np
 
 from coot.configs_retrieval import ExperimentTypesConst
@@ -82,6 +84,12 @@ def main():
                     train_loader, val_loader, 
                     test_loader, datatype=args.datatype,
                     use_wandb=args.wandb, show_log=args.show_log,)
+        
+        if args.del_weights:
+            print('Pay Attention : Delete All Model weights ... ', end='')
+            weights_dir = os.path.join(trainer.exp.path_base, "models")
+            shutil.rmtree(weights_dir)
+            print('ok')
 
         trainer.close()
         del model
