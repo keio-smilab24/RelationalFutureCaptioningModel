@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional, Union
 
 from torch import nn
 
-from nntrainer import typext, utils
+from utils import typext, utils
 
 
 def make_activation_module(name: str, cfg: Optional[ActivationConfig] = None) -> nn.Module:

@@ -9,7 +9,7 @@ import torch as th
 from torch.optim import Adam
 from torch.optim.optimizer import Optimizer
 
-from nntrainer import typext
+from utils import typext
 
 
 class OptimizerConst(typext.ConstantHolder):

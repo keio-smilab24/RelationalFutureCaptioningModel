@@ -10,11 +10,11 @@ import numpy as np
 import torch as th
 from torch import nn
 
-import nntrainer.trainer_configs
+import trainer_configs
 
 
 class BaseModelManager:
-    def __init__(self, cfg: nntrainer.trainer_configs.DefaultExperimentConfig):
+    def __init__(self, cfg: trainer_configs.DefaultExperimentConfig):
         """
         Class to hold all models. This is not a nn.Module
 
@@ -24,7 +24,7 @@ class BaseModelManager:
         # this dict contains all the models
         self.model_dict: Dict[str, nn.Module] = {}
         self.was_loaded: bool = False
-        self.cfg: nntrainer.trainer_configs.DefaultExperimentConfig = cfg
+        self.cfg: trainer_configs.DefaultExperimentConfig = cfg
         self.is_train = True
 
     def is_autocast_enabled(self) -> bool:

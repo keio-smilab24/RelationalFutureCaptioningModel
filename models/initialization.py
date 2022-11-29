@@ -4,7 +4,7 @@ Network initialization.
 import torch as th
 from torch import nn
 
-from nntrainer import utils_torch, typext, utils
+from utils import typext, utils
 
 
 def init_weight_(w: th.Tensor, init_type="uniform", init_std=1) -> None:
@@ -24,7 +24,7 @@ def init_weight_(w: th.Tensor, init_type="uniform", init_std=1) -> None:
         nn.init.xavier_normal_(w, gain=init_std)
     elif init_type == InitTypesConst.TRUNCNORM:
         # truncated normal distribution
-        utils_torch.fill_tensor_with_truncnorm(w, std=init_std)
+        utils.fill_tensor_with_truncnorm(w, std=init_std)
     elif init_type == InitTypesConst.NONE:
         # do nothing, keep pytorch default init
         pass

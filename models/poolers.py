@@ -8,9 +8,10 @@ from typing import Any, Dict, List, Optional, Union
 import torch
 from torch import nn
 
-from nntrainer import typext
-from nntrainer.models.activations import ActivationConfig, make_activation_module
-from nntrainer.typext import INF
+from utils import typext
+from utils.typext import INF
+
+from models.activations import ActivationConfig, make_activation_module
 
 
 def make_pooler_module(normalized_shape: Union[int, List[int]], name: str, cfg: Optional[PoolerConfig] = None

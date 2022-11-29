@@ -19,8 +19,6 @@ from utils.arguments import update_mart_config_from_args, set_parser, update_con
 from utils.setting import setup_experiment_identifier_from_args
 from utils.configs import MartConfig as Config
 
-from nntrainer.utils_torch import set_seed
-
 
 def main():
     args = set_parser()
@@ -45,7 +43,7 @@ def main():
         verb = "Randomly generated seed"
     print(f"{verb} {cfg.random_seed} deterministic {cfg.cudnn_deterministic} "
             f"benchmark {cfg.cudnn_benchmark}")
-    set_seed(cfg.random_seed, cudnn_deterministic=cfg.cudnn_deterministic, cudnn_benchmark=cfg.cudnn_benchmark)
+    fix_seed(cfg.random_seed, cudnn_deterministic=cfg.cudnn_deterministic, cudnn_benchmark=cfg.cudnn_benchmark)
 
     # create dataset
     train_set, _, train_loader, val_loader, _, test_loader = create_datasets_and_loaders(

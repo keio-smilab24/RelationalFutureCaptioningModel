@@ -19,26 +19,19 @@ from torch.utils import data
 from tqdm import tqdm
 import wandb
 
+import trainer_base
+from trainer_configs import BaseTrainerState
 from datasets.bila import BilaDataset, prepare_batch_inputs
-from utils.utils import get_reference_files
+from utils.utils import get_reference_files, TrainerPathConst
 from utils.configs import MartConfig, MartMetersConst as MMeters
+from utils.setting import ExperimentFilesHandler
 from metrics.evaluate_language import evaluate_language_files
 from metrics.evaluate_repetition import evaluate_repetition_files
 from metrics.evaluate_stats import evaluate_stats_files
+from metrics.metric import TRANSLATION_METRICS, TextMetricsConst, TextMetricsConstEvalCap
 from optim.optim import BertAdam, EMA
 from models.translator import Translator
-
-from nntrainer import trainer_base
-from nntrainer.experiment_organization import ExperimentFilesHandler
-from nntrainer.metric import (
-    TRANSLATION_METRICS,
-    TextMetricsConst,
-    TextMetricsConstEvalCap,
-)
-from nntrainer.models import BaseModelManager
-from nntrainer.trainer_configs import BaseTrainerState
-from nntrainer.utils import TrainerPathConst
-
+from models import BaseModelManager
 
 
 def cal_performance(pred, gold):

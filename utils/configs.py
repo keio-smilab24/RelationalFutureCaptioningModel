@@ -4,8 +4,8 @@ Definition of constants and configurations for captioning with MART.
 
 from typing import Any, Dict, Optional
 
-from nntrainer import trainer_configs
-from nntrainer.typext import ConstantHolder
+import trainer_configs
+from utils.typext import ConstantHolder
 
 
 # ---------- Path constants ----------

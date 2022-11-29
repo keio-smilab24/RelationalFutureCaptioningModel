@@ -16,11 +16,16 @@ from torch.nn.utils import clip_grad_norm_
 from torch.optim import Optimizer
 from torch.utils.data.dataloader import DataLoader
 
+import models
+import trainer_configs
 from utils import utils_yaml
-from nntrainer import lr_scheduler, metric, models, trainer_configs, utils, utils_torch
-from nntrainer.experiment_organization import ExperimentFilesHandler
-from nntrainer.metric import DefaultMetricsConst as Metrics
-from nntrainer.utils import MetricComparisonConst
+from utils import utils
+from utils.utils import MetricComparisonConst
+from utils.setting import ExperimentFilesHandler
+from optim import lr_scheduler
+from metrics import metric
+from metrics.metric import DefaultMetricsConst as Metrics
+
 
 
 class BaseTrainer:
@@ -557,7 +562,7 @@ class BaseTrainer:
                 self.state.epoch_step == self.cfg.logging.step_gpu_once and self.cfg.logging.step_gpu_once > 0):
             # get the current profile values
             (gpu_names, total_memory_per, used_memory_per, load_per, ram_total, ram_used, ram_avail
-             ) = utils_torch.profile_gpu_and_ram()
+             ) = utils.profile_gpu_and_ram()
             # average / sum over all GPUs
             gpu_mem_used: float = sum(used_memory_per)
             gpu_mem_total: float = sum(total_memory_per)

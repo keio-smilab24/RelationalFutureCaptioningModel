@@ -17,9 +17,7 @@ from tqdm import tqdm
 import cv2
 
 from utils.configs import MartConfig, MartPathConst
-
-from nntrainer.typext import ConstantHolder
-
+from utils.typext import ConstantHolder
 
 class DataTypesConstCaption(ConstantHolder):
     """

@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional, Union
 import torch as th
 from torch import nn
 
-from nntrainer import typext, utils
+from utils import typext, utils
 
 
 def make_encoder_module(dim: int, name: str, cfg: Optional[EncoderConfig] = None) -> Optional[nn.Module]:

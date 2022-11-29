@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple
 
 from torch.optim.optimizer import Optimizer
 
-from nntrainer import typext, utils
+from utils import typext, utils
 
 
 def make_lr_scheduler(optimizer: Optimizer, cfg: SchedulerConfig, base_lr: float, num_epochs: int,

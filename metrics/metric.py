@@ -16,10 +16,10 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 import torch as th
 from torch.utils.tensorboard import SummaryWriter
 
-from nntrainer import typext
-from nntrainer.experiment_organization import ExperimentFilesHandler
-from nntrainer.typext import ConstantHolder
-from nntrainer.utils import LOGGER_NAME
+from utils import typext
+from utils.typext import ConstantHolder
+from utils.setting import ExperimentFilesHandler
+from utils.utils import LOGGER_NAME
 
 
 class PrintGroupConst(typext.ConstantHolder):

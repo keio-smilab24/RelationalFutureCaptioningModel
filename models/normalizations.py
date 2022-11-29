@@ -8,8 +8,8 @@ from typing import Any, Dict, List, Optional, Union
 import torch as th
 from torch import nn
 
-import nntrainer.utils
-from nntrainer.typext import ConfigClass, ConstantHolder
+from utils.typext import ConfigClass, ConstantHolder
+from utils import utils
 
 
 def make_normalization_module(normalized_shape: Union[int, List[int], th.Size], name: str,
@@ -43,7 +43,7 @@ class NormalizationConst(ConstantHolder):
     """
     Define normalization module names.
     """
-    NONE = nntrainer.utils.NONE
+    NONE = utils.NONE
     LAYERNORM_PYTORCH = "layernorm_pytorch"
     LAYERNORM_COOT = "layernorm_coot"
 

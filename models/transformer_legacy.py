@@ -10,16 +10,16 @@ import numpy as np
 import torch as th
 from torch import nn
 
-import nntrainer.trainer_configs
-import nntrainer.typext
-import nntrainer.utils_torch
-from nntrainer.initialization import init_network
-from nntrainer.models.activations import ActivationConfig, ActivationConst, make_activation_module
-from nntrainer.models.encoder import make_encoder_module
-from nntrainer.models.mlp import MLP, MLPConfig
-from nntrainer.models.normalizations import NormalizationConfig, NormalizationConst, make_normalization_module
-from nntrainer.models.poolers import PoolerConfig, PoolerConst, make_pooler_module
-from nntrainer.typext import ConfigClass, ConstantHolder
+from utils.typext import INF
+from utils.typext import ConfigClass, ConstantHolder
+
+from models.initialization import init_network
+
+from models.activations import ActivationConfig, ActivationConst, make_activation_module
+from models.encoder import make_encoder_module
+from models.mlp import MLP, MLPConfig
+from models.normalizations import NormalizationConfig, NormalizationConst, make_normalization_module
+from models.poolers import PoolerConfig, PoolerConst, make_pooler_module
 
 
 class TransformerConfig(ConfigClass):
@@ -519,7 +519,7 @@ class MultiHeadAttention(nn.Module):
             mask_expanded_per_head = mask_expanded.unsqueeze(1).expand_as(attention_weights)
             # print("mask_expanded_per_head", mask_expanded_per_head.shape)
             # shape (batch_size, num_heads, query_len, key_len)
-            attention_weights = attention_weights.masked_fill(mask_expanded_per_head, -nntrainer.typext.INF)
+            attention_weights = attention_weights.masked_fill(mask_expanded_per_head, -INF)
             # print("attention_weights", attention_weights.shape)
             # shape (batch_size, num_heads, query_len, query_len)
 

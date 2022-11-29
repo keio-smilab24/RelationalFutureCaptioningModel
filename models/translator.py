@@ -27,7 +27,7 @@ from torch import nn
 from datasets.bila import BilaDataset as RCDataset
 from utils.configs import MartConfig
 from models.beam_search import BeamSearch
-from nntrainer import utils
+from utils import utils
 
 
 def tile(x, count, dim=0):

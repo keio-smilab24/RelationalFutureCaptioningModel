@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List
 
 # TODO :
-from nntrainer.utils import TrainerPathConst
+from utils.utils import TrainerPathConst
 
 
 def parse_with_config(parser: argparse.ArgumentParser):

@@ -6,7 +6,9 @@ from typing import Any, Dict, List, Optional
 
 from torch import nn
 
-from nntrainer import models, typext, utils
+from utils import typext, utils
+
+from nntrainer import models
 
 
 class ResidualsEnum(typext.ConstantHolder):

@@ -4,9 +4,9 @@ Configuration setup for TrainerBase. Moved to separate file to avoid circular im
 from copy import deepcopy
 from typing import Dict, List, Optional
 
-from nntrainer import lr_scheduler, optimization, typext, utils
-from nntrainer.utils import ConfigNamesConst
-
+from optim import lr_scheduler, optimization
+from utils import typext, utils
+from utils.utils import ConfigNamesConst
 
 class BaseTrainerState(typext.SaveableBaseModel):
     """

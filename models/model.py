@@ -10,9 +10,7 @@ import torchvision.models as models
 
 from losses.loss import LabelSmoothingLoss
 from utils.configs import MartConfig, MartPathConst
-
-from nntrainer.utils_torch import count_parameters
-
+from utils.utils import count_parameters
 
 
 logger = logging.getLogger(__name__)
