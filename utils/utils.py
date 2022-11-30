@@ -715,11 +715,10 @@ def _get_gputil_info():
     return "\n".join(gpu_strings), gpu_info
 
 
-# ---------- Modeling ----------
-
 def count_parameters(model, verbose=True):
     """
-    Count number of parameters in PyTorch model,
+    Summary:
+        model内の学習可能なパラメータ・固定パラメータの数を返す
     """
     n_all = sum(p.numel() for p in model.parameters())
     n_frozen = sum(p.numel() for p in model.parameters() if not p.requires_grad)

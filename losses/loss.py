@@ -21,9 +21,7 @@ class LabelSmoothingLoss(nn.Module):
 
         self.log_softmax = nn.LogSoftmax(dim=-1)
 
-        smoothing_value = label_smoothing / (
-            tgt_vocab_size - 1
-        )  # count for the ground-truth word
+        smoothing_value = label_smoothing/(tgt_vocab_size-1)  # count for the ground-truth word
         one_hot = torch.full((tgt_vocab_size,), smoothing_value)
         # one_hot[self.ignore_index] = 0
         self.register_buffer("one_hot", one_hot.unsqueeze(0))
@@ -35,11 +33,6 @@ class LabelSmoothingLoss(nn.Module):
         output (FloatTensor): batch_size x n_classes
         target (LongTensor): batch_size, with indices in [-1, tgt_vocab_size-1], `-1` is ignored
         """
-        # # debug "LogSoftmax backwards returned NaN" error
-        # if output.isnan().any() or output.isinf().any():
-        #     print("Outputs are NaN or Inf!")
-        #     breakpoint()
-        # # end debug
         valid_indices = (
             target != self.ignore_index
         )  # ignore examples with target value -1

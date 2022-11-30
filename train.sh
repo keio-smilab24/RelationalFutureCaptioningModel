@@ -1,5 +1,7 @@
 # for train
-python train.py -c config/ponnet_100m_coot_clip_mart.yaml --datatype bilas --del_weights
-
+for i in `seq 1 5`
+do
+    python train.py -c config/bilas.yaml --datatype bilas --del_weights --wandb
+done
 # for test
 # python show_caption.py -m base

@@ -4,13 +4,14 @@ import math
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
 from torch import nn
+import torch.nn.functional as F
 import torchvision.models as models
 
 from losses.loss import LabelSmoothingLoss
 from utils.configs import MartConfig, MartPathConst
 from utils.utils import count_parameters
+from models.activations import gelu
 
 
 logger = logging.getLogger(__name__)
@@ -26,78 +27,217 @@ INF = float("inf")
 # for fp16 need something like 255
 
 
-def create_mart_model(
-    cfg: MartConfig,
-    vocab_size: int,
-    cache_dir: str = MartPathConst.CACHE_DIR,
-    verbose: bool = True,
-) -> nn.Module:
-    """
-    Args:
-        cfg: Experiment cfg.
-        vocab_size: Vocabulary, calculated in mart as len(train_set.word2idx).
-        cache_dir: Cache directory.
-        verbose: Print model name and number of parameters.
-
-    Returns:
-        MART model.
-    """
-    cfg.max_position_embeddings = cfg.max_v_len + cfg.max_t_len
-    cfg.vocab_size = vocab_size
-    if cfg.recurrent: # true
-        logger.info("Use recurrent model - Mine")
-        model = RecursiveTransformer(cfg, vocab_size=vocab_size)
-    if cfg.use_glove: # false
-        if hasattr(model, "embeddings"):
-            logger.info("Load GloVe as word embedding")
-            model.embeddings.set_pretrained_embedding(
-                torch.from_numpy(
-                    torch.load(
-                        Path(cache_dir) / f"{cfg.dataset_train.name}_vocab_glove.pt"
-                    )
-                ).float(),
-                freeze=cfg.freeze_glove,
+class RecursiveTransformer(nn.Module):
+    def __init__(
+        self,
+        cfg: MartConfig,
+        vocab_size: int
+    ):
+        super().__init__()
+        self.cfg = cfg
+        self.cfg.vocab_size = vocab_size
+        
+        self.img_embedder = SubLayerT()
+        self.embeddings = EmbeddingsWithVideo(cfg, add_postion_embeddings=True)
+        self.TSModule = TimeSeriesMoudule(cfg)
+        self.encoder = EncoderWoMemory(cfg)
+        
+        decoder_classifier_weight = (
+            self.embeddings.word_embeddings.weight
+            if self.cfg.share_wd_cls_weight
+            else None
+        )
+        
+        self.transformerdecoder = Decoder(cfg)
+        self.decoder = LMPredictionHead(cfg, decoder_classifier_weight)
+        
+        if self.cfg.label_smoothing != 0:
+            self.loss_func = LabelSmoothingLoss(
+                cfg.label_smoothing, cfg.vocab_size, ignore_index=-1
             )
         else:
-            logger.warning(
-                "This model has no embeddings, cannot load glove vectors into the model"
+            self.loss_func = nn.CrossEntropyLoss(ignore_index=-1)
+        self.contloss_func = nn.CrossEntropyLoss(ignore_index=-1)
+        self.actionloss_func = nn.CrossEntropyLoss()
+        
+        # clipの特徴量の次元
+        input_size = 768
+        # TODO : memo cnnを使ったadjustがbetterな気がする
+        self.size_adjust = nn.Linear(150528, 768)
+        self.upsampling = nn.Linear(768, 1024)
+        self.pred_f = nn.Sequential(
+            nn.LayerNorm(input_size),
+            nn.Linear(input_size, input_size * 2),
+            nn.ReLU(),
+            nn.Linear(input_size * 2, input_size),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(input_size, input_size),
+        )
+        self.ff = nn.Sequential(
+            nn.Linear(input_size, input_size),
+            nn.ReLU(),
+            nn.Linear(input_size, input_size),
+            nn.Dropout(0.2),
+        )
+
+        self.rec_loss = nn.MSELoss()
+        self.apply(self.init_bert_weights)
+        self.cliploss = CLIPloss(hidden_dim=cfg.hidden_size, max_t_length=cfg.max_t_len)
+
+        self.idx = 0
+
+    def init_bert_weights(self, module):
+        """
+        Initialize the weights.
+        """
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            # Slightly different from the TF version
+            # which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.cfg.initializer_range)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+
+    def forward_step(
+        self,
+        input_ids: torch.Tensor,
+        features: torch.Tensor,
+        input_masks: torch.Tensor,
+        token_type_ids: torch.Tensor
+    ):
+        """
+            singleure step forward in the recursive struct
+        Args:
+            input_ids (torch.Tensor):
+            video_features (torch.Tensor):
+            input_masks (torch.Tensor):
+            token_type_ids (torch.Tensor):
+        """
+        # 画像特徴だけ抽出
+        img_feats = features[:, 1:self.cfg.max_v_len-1, :].clone()  # (B, 7, 150528)
+        features = self.size_adjust(features)                       # (B, 31, 150528) -> (B, 31, 768)
+        
+        self.pred_reconst = []
+        self.gt_rec = []
+        
+        # resnetを用いた特徴量抽出
+        features[:, 1:self.cfg.max_v_len-1, :] = self.img_embedder(img_feats)
+
+        # 再構成用
+        rec_feature = features[:,1,:].clone()
+        # 画像特徴量only
+        img_feats = features[:, 1:self.cfg.max_v_len-1, :].clone()
+
+        # Time Series Module
+        _, img_feats = self.TSModule(img_feats)
+
+        embeddings = self.embeddings(input_ids, features, token_type_ids)
+        encoded_layer_outputs = self.encoder(
+            embeddings, input_masks, output_all_encoded_layers=False
+        )
+        decoded_layer_outputs = self.transformerdecoder(
+            encoded_layer_outputs[-1], input_masks, img_feats
+        )
+        prediction_scores = self.decoder(
+            decoded_layer_outputs[-1]
+        )  # (N, L, vocab_size)
+        return encoded_layer_outputs, prediction_scores, rec_feature
+
+    def forward(
+        self,
+        input_ids_list,
+        video_features_list,
+        input_masks_list,
+        token_type_ids_list,
+        input_labels_list,
+        gt_rec=None,
+    ):
+        """
+        Args:
+            input_ids_list: [(N, L)] * step_size
+            video_features_list: [(N, L, D_v)] * step_size
+            input_masks_list: [(N, L)] * step_size with 1 indicates valid bits
+            token_type_ids_list: [(N, L)] * step_size, with `0` on the first `max_v_len` bits,
+                `1` on the last `max_t_len`
+            input_labels_list: [(N, L)] * step_size, with `-1` on ignored positions,
+                will not be used when return_memory is True, thus can be None in this case
+            return_memory: bool,
+
+        Returns:
+        """
+        step_size = len(input_ids_list) # 1
+        encoded_outputs_list = []  # [(N, L, D)] * step_size
+        prediction_scores_list = []  # [(N, L, vocab_size)] * step_size
+        pred_reconst = []
+        gt_reconst = []
+        action_score = []
+
+        if gt_rec is not None:
+            for idx in range(step_size):
+                encoded_layer_outputs, prediction_scores, pred_tmp = self.forward_step(
+                    input_ids_list[idx],
+                    video_features_list[idx],
+                    input_masks_list[idx],
+                    token_type_ids_list[idx]
+                )
+                gt_reconst.append(gt_rec[idx])
+                pred_reconst.append(pred_tmp)
+                encoded_outputs_list.append(encoded_layer_outputs)
+                prediction_scores_list.append(prediction_scores)
+                action_score.append(prediction_scores[:, 7, :])
+        else:
+            for idx in range(step_size):
+                encoded_layer_outputs, prediction_scores = self.forward_step(
+                    input_ids_list[idx],
+                    video_features_list[idx],
+                    input_masks_list[idx],
+                    token_type_ids_list[idx]
+                )
+                encoded_outputs_list.append(encoded_layer_outputs)
+                prediction_scores_list.append(prediction_scores)
+                action_score.append(prediction_scores[:, 7, :])
+        
+        # compute loss, get predicted words
+        caption_loss = 0.0
+        for idx in range(step_size):
+            snt_loss = self.loss_func(
+                prediction_scores_list[idx].view(-1, self.cfg.vocab_size),
+                input_labels_list[idx].view(-1),
             )
+            """
+            # TODO : 確認 ここの7という値はなに
+            """
+            gt_action_list = input_labels_list[idx][:, 7]
+            act_score_list = action_score[idx].cpu()
+            iwp_loss = 0.0
+            for actidx in range(len(gt_action_list)):
+                gt_action = torch.tensor([gt_action_list[actidx]], dtype=int)
+                gt_idx = gt_action.tolist()
+                if gt_idx[0] == -1:
+                    continue
+                if gt_idx[0] in ACTION_WEIGHT:
+                    iwp_loss += (1 / ACTION_WEIGHT[gt_idx[0]]) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
+                else:
+                    iwp_loss += (1 / 300) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
+            clip_loss = 0.0
 
-    # output model properties
-    if verbose: # true
-        print(f"Model: {model.__class__.__name__}")
-        count_parameters(model)
-        if hasattr(model, "embeddings") and hasattr(
-            model.embeddings, "word_embeddings"
-        ):
-            count_parameters(model.embeddings.word_embeddings)
+            clip_loss += self.cliploss(pred_reconst[idx], encoded_outputs_list[idx][0][:, self.cfg.max_v_len:, :])
+            if gt_rec is not None:
+                rec_loss = self.rec_loss(pred_reconst[idx].reshape(-1, 16, 16, 3), gt_reconst[idx] / 255.)
 
-    return model
+            caption_loss += 15 * snt_loss + 500 * rec_loss + 4 * clip_loss + iwp_loss / 100
+        caption_loss /= step_size
+        return caption_loss, prediction_scores_list, snt_loss, rec_loss, clip_loss
 
-
-def gelu(x):
-    """
-    Implementation of the gelu activation function.
-        For information: OpenAI GPT"s gelu is slightly different
-        (and gives slightly different results):
-        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-        Also see https://arxiv.org/abs/1606.08415
-    Pytorch公式実装のgeluで良さそう
-    """
-    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
 class PositionEncoding(nn.Module):
     """
     Add positional information to input tensor.
-    :Examples:
-        >>> model = PositionEncoding(d_model=6, max_len=10, dropout=0)
-        >>> test_input1 = torch.zeros(3, 10, 6)
-        >>> output1 = model(test_input1)
-        >>> output1.size()
-        >>> test_input2 = torch.zeros(5, 3, 9, 6)
-        >>> output2 = model(test_input2)
-        >>> output2.size()
     """
 
     def __init__(self, n_filters=128, max_len=500):
@@ -366,12 +506,12 @@ class LayerWoMemory(nn.Module):
         # self.attention = nn.ModuleList(
         #     [Attention(cfg) for _ in range(self.att_num)]
         # )
-        self.mmha = Attention(cfg)
-        self.mha = Attention(cfg)
+        # self.mmha = Attention(cfg)
+        # self.mha = Attention(cfg)
         self.attention = Attention(cfg)
         self.hidden_intermediate = Intermediate(cfg)
-        self.output = Output(cfg)
-        self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
+        # self.output = Output(cfg)
+        # self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
         self.rand = torch.randn(1, requires_grad=True).cuda()
         self.rand_z = torch.randn(1, requires_grad=True).cuda()
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
@@ -515,7 +655,7 @@ class TrmEncLayer(nn.Module):
         # self.attention = RelationalSelfAttention(cfg)
         # self.attention = Attention(cfg)
         self.attention = MultiHeadRSA(cfg)
-        self.output = TrmFeedForward(cfg)
+        # self.output = TrmFeedForward(cfg)  # 全結合層
         self.hidden_size = cfg.hidden_size
 
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
@@ -533,8 +673,7 @@ class TrmEncLayer(nn.Module):
         tmp_x = x.clone().cuda()      # (16, 7, 768)
         target = tmp_x.clone().cuda() # (16, 7, 768)
         target = self.attention(target, tmp_x)
-        x = target.clone().cuda()
-        x = self.z * tmp_x + (1 - self.z) * x
+        x = self.z * tmp_x + (1 - self.z) * target
         x = self.LayerNorm(x)
         tmp_x = x.clone().cuda()
         # x = self.LayerNorm(x)
@@ -552,7 +691,7 @@ class TimeSeriesEncoder(nn.Module):
         self.cfg = cfg
         self.pe = PositionEncoding(n_filters=768)
         self.layers = nn.ModuleList([TrmEncLayer(self.cfg) for _ in range(num_layers)])
-        self.ff = TrmFeedForward(self.cfg)
+        # self.ff = TrmFeedForward(self.cfg)
 
     def forward(self, x):
         x = self.pe(x)
@@ -591,7 +730,7 @@ class EmbeddingsWithVideo(nn.Module):
             nn.ReLU(True),
             nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps),
         )
-        self.video_embeddings = nn.Sequential(
+        self.img_embeddings = nn.Sequential(
             # nn.LayerNorm(cfg.video_feature_size, eps=cfg.layer_norm_eps),
             # # nn.Dropout(cfg.hidden_dropout_prob),
             # nn.Linear(cfg.video_feature_size, cfg.hidden_size),
@@ -621,27 +760,27 @@ class EmbeddingsWithVideo(nn.Module):
             padding_idx=self.word_embeddings.padding_idx,
         )
 
-    def forward(self, input_ids, video_features, token_type_ids):
+    def forward(self, input_ids, img_feats, token_type_ids):
         """
         Args:
-            input_ids: (N, L) | CLS, VID...VID, SEP BOS, W..W, EOSm, PAD...PAD
-            video_features: (N, L, D) | XX, VID..VID, XX...XX
+            input_ids: (N, L) | CLS, VID...VID, SEP BOS, W..W, EOS, PAD...PAD
+            img_features: (N, L, D) | XX, VID..VID, XX...XX
             token_type_ids: (N, L, D)
 
         Returns:
         """
         words_embeddings = self.word_fc(self.word_embeddings(input_ids))
-        video_embeddings = self.video_embeddings(video_features)
+        img_embeddings = self.img_embeddings(img_feats)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
         words_embeddings += token_type_embeddings
-        embeddings = words_embeddings + video_embeddings + token_type_embeddings
+        embeddings = words_embeddings + img_embeddings + token_type_embeddings
 
         if self.add_postion_embeddings:
             embeddings = self.position_embeddings(embeddings)
 
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
-        return embeddings  # (N, L, D)
+        return embeddings 
 
 
 
@@ -860,26 +999,24 @@ class SubLayerT(nn.Module):
     def __init__(self):
         super(SubLayerT, self).__init__()
 
-        # self.conv1 = nn.Conv2d(3, 3, 4, stride=4) # (180, 320)
         self.resnet = models.resnet50(pretrained=True)
         self.fc1 = nn.Linear(1024, 768)
         self.conv1 = nn.Conv2d(256, 456, 6, stride=2)
         self.conv2 = nn.Conv2d(456, 512, 5, stride=3)
         self.conv3 = nn.Conv2d(512, 768, 8, stride=1)
 
-    def forward(self, x):
-        # x = self.conv1(x)
-        x = x.reshape(-1, 3, 224, 224)
+    def forward(self, x: torch.Tensor):
+        B,L,_ = x.size()
+        x = x.view(-1, 3, 224, 224)
         x = self.resnet.conv1(x)
         x = self.resnet.bn1(x)
         x = self.resnet.relu(x)
         x = self.resnet.maxpool(x)
-        x = self.resnet.layer1(x) # (b, 256, 56, 56)
-        # x = F.adaptive_avg_pool2d(x, (2, 2)) # (b, 256, 6, 8)
+        x = self.resnet.layer1(x)
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
-        x = torch.reshape(x,(-1, 768))
+        x = torch.reshape(x,(B,L,768))
 
         return x
 
@@ -914,212 +1051,47 @@ class CLIPloss(nn.Module):
         cliploss = (loss_i + loss_t) / 2
         return cliploss
 
+def create_model(
+    cfg: MartConfig,
+    vocab_size: int,
+    cache_dir: str = MartPathConst.CACHE_DIR,
+    verbose: bool = True,
+) -> nn.Module:
+    """
+    Args:
+        cfg: Experiment cfg.
+        vocab_size: Vocabulary, calculated in mart as len(train_set.word2idx).
+        cache_dir: Cache directory.
+        verbose: Print model name and number of parameters.
+    """
+    cfg.max_position_embeddings = cfg.max_v_len + cfg.max_t_len
+    cfg.vocab_size = vocab_size
 
-class RecursiveTransformer(nn.Module):
-    def __init__(
-        self,
-        cfg: MartConfig,
-        vocab_size: int
-    ):
-        super().__init__()
-        self.cfg = cfg
-        self.cfg.vocab_size = vocab_size
-        
-        self.embeddings = EmbeddingsWithVideo(cfg, add_postion_embeddings=True)
-        self.TSModule = TimeSeriesMoudule(cfg)
-        self.encoder = EncoderWoMemory(cfg)
-        
-        decoder_classifier_weight = (
-            self.embeddings.word_embeddings.weight
-            if self.cfg.share_wd_cls_weight
-            else None
-        )
-        
-        self.decoder = LMPredictionHead(cfg, decoder_classifier_weight)
-        self.transformerdecoder = Decoder(cfg)
-        
-        if self.cfg.label_smoothing != 0:
-            self.loss_func = LabelSmoothingLoss(
-                cfg.label_smoothing, cfg.vocab_size, ignore_index=-1
+    if cfg.recurrent: # true
+        logger.info("Use recurrent model - Mine")
+        model = RecursiveTransformer(cfg, vocab_size=vocab_size)
+    
+    if cfg.use_glove: # false
+        if hasattr(model, "embeddings"):
+            logger.info("Load GloVe as word embedding")
+            model.embeddings.set_pretrained_embedding(
+                torch.from_numpy(
+                    torch.load(
+                        Path(cache_dir) / f"{cfg.dataset_train.name}_vocab_glove.pt"
+                    )
+                ).float(),
+                freeze=cfg.freeze_glove,
             )
         else:
-            self.loss_func = nn.CrossEntropyLoss(ignore_index=-1)
-        self.contloss_func = nn.CrossEntropyLoss(ignore_index=-1)
-        self.actionloss_func = nn.CrossEntropyLoss()
-        
-        # clipの特徴量の次元
-        input_size = 768
-        # TODO : memo cnnを使ったadjustがbetterな気がする
-        self.size_adjust = nn.Linear(150528, 768)
-        self.upsampling = nn.Linear(768, 1024)
-        self.pred_f = nn.Sequential(
-            nn.LayerNorm(input_size),
-            nn.Linear(input_size, input_size * 2),
-            nn.ReLU(),
-            nn.Linear(input_size * 2, input_size),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(input_size, input_size),
-        )
-        self.ff = nn.Sequential(
-            nn.Linear(input_size, input_size),
-            nn.ReLU(),
-            nn.Linear(input_size, input_size),
-            nn.Dropout(0.2),
-        )
-
-        self.rec_loss = nn.MSELoss()
-        self.apply(self.init_bert_weights)
-        self.cliploss = CLIPloss(hidden_dim=cfg.hidden_size, max_t_length=cfg.max_t_len)
-
-        self.idx = 0
-        self.mlp = SubLayerT()
-
-    def init_bert_weights(self, module):
-        """
-        Initialize the weights.
-        """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Slightly different from the TF version
-            # which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.cfg.initializer_range)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
-
-    def forward_step(
-        self,
-        input_ids: torch.Tensor,
-        features: torch.Tensor,
-        input_masks: torch.Tensor,
-        token_type_ids: torch.Tensor
-    ):
-        """
-            singleure step forward in the recursive struct
-        Args:
-            input_ids (torch.Tensor): [16, 31]
-            video_features (torch.Tensor): [16, 31, 150528]
-            input_masks (torch.Tensor): [16, 31]
-            token_type_ids (torch.Tensor): [16, 31]
-        """
-        # 画像特徴だけ抽出
-        img_feats = features[:, 1:self.cfg.max_v_len-1, :].clone()  # (B, 7, 150528)
-        features = self.size_adjust(features) # (B, 31, 150528) -> (B, 31, 768)
-        
-        self.pred_reconst = []
-        self.gt_rec = []
-        
-        # resnetを用いた特徴量抽出
-        for idx in range(self.cfg.max_v_len-2):
-            features[:, idx+1, :] = self.mlp(img_feats[:, idx, :]).clone()
-
-        # 再構成用
-        rec_feature = features[:,1,:].clone()
-        # 画像特徴量only
-        img_feats = features[:, 1:self.cfg.max_v_len-1, :].clone()
-
-        # Time Series Module
-        _, img_feats = self.TSModule(img_feats)
-
-        embeddings = self.embeddings(
-            input_ids, features, token_type_ids
-        )  # (N, L, D)
-        encoded_layer_outputs = self.encoder(
-            embeddings, input_masks, output_all_encoded_layers=False
-        )  # both outputs are list
-        decoded_layer_outputs = self.transformerdecoder(
-            encoded_layer_outputs[-1], input_masks, img_feats
-        )
-        prediction_scores = self.decoder(
-            decoded_layer_outputs[-1]
-        )  # (N, L, vocab_size)
-        return encoded_layer_outputs, prediction_scores, rec_feature
-
-    def forward(
-        self,
-        input_ids_list,
-        video_features_list,
-        input_masks_list,
-        token_type_ids_list,
-        input_labels_list,
-        gt_rec=None,
-    ):
-        """
-        Args:
-            input_ids_list: [(N, L)] * step_size
-            video_features_list: [(N, L, D_v)] * step_size
-            input_masks_list: [(N, L)] * step_size with 1 indicates valid bits
-            token_type_ids_list: [(N, L)] * step_size, with `0` on the first `max_v_len` bits,
-                `1` on the last `max_t_len`
-            input_labels_list: [(N, L)] * step_size, with `-1` on ignored positions,
-                will not be used when return_memory is True, thus can be None in this case
-            return_memory: bool,
-
-        Returns:
-        """
-        step_size = len(input_ids_list) # 1
-        encoded_outputs_list = []  # [(N, L, D)] * step_size
-        prediction_scores_list = []  # [(N, L, vocab_size)] * step_size
-        pred_reconst = []
-        gt_reconst = []
-        action_score = []
-
-        if gt_rec is not None:
-            for idx in range(step_size):
-                encoded_layer_outputs, prediction_scores, pred_tmp = self.forward_step(
-                    input_ids_list[idx],
-                    video_features_list[idx],
-                    input_masks_list[idx],
-                    token_type_ids_list[idx]
-                )
-                gt_reconst.append(gt_rec[idx])
-                pred_reconst.append(pred_tmp)
-                encoded_outputs_list.append(encoded_layer_outputs)
-                prediction_scores_list.append(prediction_scores)
-                action_score.append(prediction_scores[:, 7, :])
-        else:
-            for idx in range(step_size):
-                encoded_layer_outputs, prediction_scores = self.forward_step(
-                    input_ids_list[idx],
-                    video_features_list[idx],
-                    input_masks_list[idx],
-                    token_type_ids_list[idx]
-                )
-                encoded_outputs_list.append(encoded_layer_outputs)
-                prediction_scores_list.append(prediction_scores)
-                action_score.append(prediction_scores[:, 7, :])
-        
-        # compute loss, get predicted words
-        caption_loss = 0.0
-        for idx in range(step_size):
-            snt_loss = self.loss_func(
-                prediction_scores_list[idx].view(-1, self.cfg.vocab_size),
-                input_labels_list[idx].view(-1),
+            logger.warning(
+                "This model has no embeddings, cannot load glove vectors into the model"
             )
-            """
-            # TODO : 確認 ここの7という値はなに
-            """
-            gt_action_list = input_labels_list[idx][:, 7]
-            act_score_list = action_score[idx].cpu()
-            iwp_loss = 0.0
-            for actidx in range(len(gt_action_list)):
-                gt_action = torch.tensor([gt_action_list[actidx]], dtype=int)
-                gt_idx = gt_action.tolist()
-                if gt_idx[0] == -1:
-                    continue
-                if gt_idx[0] in ACTION_WEIGHT:
-                    iwp_loss += (1 / ACTION_WEIGHT[gt_idx[0]]) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
-                else:
-                    iwp_loss += (1 / 300) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
-            clip_loss = 0.0
 
-            clip_loss += self.cliploss(pred_reconst[idx], encoded_outputs_list[idx][0][:, self.cfg.max_v_len:, :])
-            if gt_rec is not None:
-                rec_loss = self.rec_loss(pred_reconst[idx].reshape(-1, 16, 16, 3), gt_reconst[idx] / 255.)
+    # output model properties
+    if verbose: # true
+        print(f"Model: {model.__class__.__name__}")
+        count_parameters(model)
+        if hasattr(model, "embeddings") and hasattr(model.embeddings, "word_embeddings"):
+            count_parameters(model.embeddings.word_embeddings)
 
-            caption_loss += 15 * snt_loss + 500 * rec_loss + 4 * clip_loss + iwp_loss / 100
-        caption_loss /= step_size
-        return caption_loss, prediction_scores_list, snt_loss, rec_loss, clip_loss
+    return model

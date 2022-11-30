@@ -12,6 +12,7 @@ import nltk
 import numpy as np
 import torch
 from torch.utils import data
+from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
 from tqdm import tqdm
 import cv2
@@ -114,7 +115,6 @@ class BilaDataset(data.Dataset):
         mode: str="train",
         recurrent: bool=True,
         untied: bool=False,
-        video_feature_dir: Optional[str] = None,
         annotations_dir: str = "data",
         preload: bool = False,
         datatype: str = "bilas",
@@ -129,7 +129,6 @@ class BilaDataset(data.Dataset):
             self.annotations_dir = Path('data/BilaS/')
 
         # Video feature settings
-        self.video_feature_dir = Path(video_feature_dir) / self.dataset_name # data/mart_video_feature/BILA
         self.num_images = max_v_len - 2
 
         # Parameters for sequence lengths
@@ -564,11 +563,8 @@ def step_collate(padded_batch_step):
 def create_datasets_and_loaders(
     cfg: MartConfig,
     annotations_dir: str = MartPathConst.ANNOTATIONS_DIR,
-    video_feature_dir: str = MartPathConst.VIDEO_FEATURE_DIR,
     datatype: str = 'bila',
-) -> Tuple[
-    BilaDataset, BilaDataset, data.DataLoader, data.DataLoader
-]:
+) -> Tuple[BilaDataset, BilaDataset, DataLoader, DataLoader]:
     # create the dataset
     dset_name_train = cfg.dataset_train.name
     train_dataset = BilaDataset(
@@ -579,7 +575,6 @@ def create_datasets_and_loaders(
         mode="train",
         recurrent=cfg.recurrent,
         untied=cfg.untied or cfg.mtrans,
-        video_feature_dir=video_feature_dir,
         annotations_dir=annotations_dir,
         preload=cfg.dataset_train.preload,
         datatype=datatype,
@@ -595,7 +590,6 @@ def create_datasets_and_loaders(
         mode="val",
         recurrent=cfg.recurrent,
         untied=cfg.untied or cfg.mtrans,
-        video_feature_dir=video_feature_dir,
         annotations_dir=annotations_dir,
         preload=cfg.dataset_val.preload,
         datatype=datatype,
@@ -625,7 +619,6 @@ def create_datasets_and_loaders(
         mode="test",
         recurrent=cfg.recurrent,
         untied=cfg.untied or cfg.mtrans,
-        video_feature_dir=video_feature_dir,
         annotations_dir=annotations_dir,
         preload=cfg.dataset_val.preload,
         datatype=datatype,
@@ -639,5 +632,4 @@ def create_datasets_and_loaders(
         pin_memory=cfg.dataset_val.pin_memory,
     )
 
-
-    return train_dataset, val_dataset, train_loader, val_loader, test_dataset, test_loader
+    return train_dataset, train_loader, val_dataset, val_loader, test_dataset, test_loader

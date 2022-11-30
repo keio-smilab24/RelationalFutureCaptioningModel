@@ -1,17 +1,10 @@
-"""
-Train captioning with MART.
-
-Originally published by https://github.com/jayleicn/recurrent-transformer under MIT license
-Reworked by https://github.com/gingsi/coot-videotext under Apache 2 license
-"""
-
 import os
 import shutil
 import datetime
 import numpy as np
 
 from trainer import MartTrainer
-from models.model import create_mart_model
+from models.model import create_model
 from datasets.bila import create_datasets_and_loaders
 from utils.utils_yaml import load_yaml_config_file
 from utils.utils import fix_seed
@@ -46,14 +39,14 @@ def main():
     fix_seed(cfg.random_seed, cudnn_deterministic=cfg.cudnn_deterministic, cudnn_benchmark=cfg.cudnn_benchmark)
 
     # create dataset
-    train_set, _, train_loader, val_loader, _, test_loader = create_datasets_and_loaders(
-        cfg, args.data_dir, args.video_feature_dir, datatype=args.datatype)
+    train_set, train_loader, _, val_loader, _, test_loader =\
+        create_datasets_and_loaders(cfg, args.data_dir, datatype=args.datatype)
 
     for i in range(args.start_run):
         run_number = datetime.datetime.now()
         run_name = f"{args.run_name}{run_number}"
 
-        model = create_mart_model(cfg, len(train_set.word2idx), cache_dir=args.cache_dir)
+        model = create_model(cfg, len(train_set.word2idx), cache_dir=args.cache_dir)
 
         if args.print_model and i == 0:
             print(model)

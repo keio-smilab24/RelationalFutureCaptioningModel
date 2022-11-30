@@ -32,10 +32,6 @@ class MartDatasetConfig(trainer_configs.BaseDatasetConfig):
 
 class MartConfig(trainer_configs.BaseExperimentConfig):
     """
-    Definition to load the yaml config files for training a MART captioning model.
-    This is where the actual config dict goes and is processed.
-
-
     Args:
         config: Configuration dictionary to be loaded, logging part.
 

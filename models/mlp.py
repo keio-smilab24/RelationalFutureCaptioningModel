@@ -7,9 +7,7 @@ from typing import Any, Dict, List, Optional
 from torch import nn
 
 from utils import typext, utils
-
-from nntrainer import models
-
+import models
 
 class ResidualsEnum(typext.ConstantHolder):
     """
