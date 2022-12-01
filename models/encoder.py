@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional, Union
 import torch as th
 from torch import nn
 
-from utils import typext, utils
+from utils import baseconfig, utils
 
 
 def make_encoder_module(dim: int, name: str, cfg: Optional[EncoderConfig] = None) -> Optional[nn.Module]:
@@ -31,12 +31,12 @@ def make_encoder_module(dim: int, name: str, cfg: Optional[EncoderConfig] = None
     raise ValueError(f"Embedding name unknown: {name}")
 
 
-class EncoderConst(typext.ConstantHolder):
+class EncoderConst(baseconfig.ConstantHolder):
     NONE = utils.NONE
     SINCOS = "sincos"
 
 
-class EncoderConfig(typext.ConfigClass):
+class EncoderConfig(baseconfig.ConfigClass):
     """
     Activation function.
 
@@ -112,7 +112,7 @@ class PositionalEncodingSinCos(nn.Module):
         return x
 
 
-class PositionalEncodingConst(typext.ConstantHolder):
+class PositionalEncodingConst(baseconfig.ConstantHolder):
     """
     Positional encoding modules.
     """

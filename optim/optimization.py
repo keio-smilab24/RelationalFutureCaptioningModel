@@ -9,10 +9,11 @@ import torch as th
 from torch.optim import Adam
 from torch.optim.optimizer import Optimizer
 
-from utils import typext
+from utils import baseconfig
+from utils.baseconfig import ConfigClass
 
 
-class OptimizerConst(typext.ConstantHolder):
+class OptimizerConst(baseconfig.ConstantHolder):
     """
     Optimizer name constants.
     """
@@ -20,7 +21,7 @@ class OptimizerConst(typext.ConstantHolder):
     RADAM = "radam"
 
 
-class OptimizerConfig(typext.ConfigClass):
+class OptimizerConfig(ConfigClass):
     """
     Optimizer Configuration Class
 

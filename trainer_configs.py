@@ -5,10 +5,11 @@ from copy import deepcopy
 from typing import Dict, List, Optional
 
 from optim import lr_scheduler, optimization
-from utils import typext, utils
+from utils import baseconfig, utils
+from utils.baseconfig import ConfigClass
 from utils.utils import ConfigNamesConst
 
-class BaseTrainerState(typext.SaveableBaseModel):
+class BaseTrainerState(baseconfig.SaveableBaseModel):
     """
     Current trainer state that must be saved for training continuation..
     """
@@ -32,7 +33,7 @@ class BaseTrainerState(typext.SaveableBaseModel):
     last_grad_norm: int = 0
 
 
-class BaseExperimentConfig(typext.ConfigClass):
+class BaseExperimentConfig(ConfigClass):
     """
     Base configuration class, loads the dict from yaml config files for an experiment.
 
@@ -93,7 +94,7 @@ class DefaultExperimentConfig(BaseExperimentConfig):
         self.lr_scheduler = lr_scheduler.SchedulerConfig(config.pop(ConfigNamesConst.LR_SCHEDULER))
 
 
-class BaseTrainConfig(typext.ConfigClass):
+class BaseTrainConfig(ConfigClass):
     """
     Base configuration class for training.
 
@@ -112,7 +113,7 @@ class BaseTrainConfig(typext.ConfigClass):
         assert isinstance(self.clip_gradient, (int, float)) and self.clip_gradient >= -1
 
 
-class BaseValConfig(typext.ConfigClass):
+class BaseValConfig(ConfigClass):
     """
     Base configuration class for validation.
 
@@ -141,7 +142,7 @@ class BaseValConfig(typext.ConfigClass):
         assert isinstance(self.det_best_terminate_after, int) and self.det_best_terminate_after >= -1
 
 
-class BaseSavingConfig(typext.ConfigClass):
+class BaseSavingConfig(ConfigClass):
     """
     Base Saving Configuration Class
 
@@ -163,7 +164,7 @@ class BaseSavingConfig(typext.ConfigClass):
         assert self.keep_freq >= -1
 
 
-class BaseDatasetConfig(typext.ConfigClass):
+class BaseDatasetConfig(ConfigClass):
     """
     Base Dataset Configuration class
 
@@ -185,7 +186,7 @@ class BaseDatasetConfig(typext.ConfigClass):
         self.drop_last: bool = config.pop("drop_last")
 
 
-class BaseLoggingConfig(typext.ConfigClass):
+class BaseLoggingConfig(ConfigClass):
     """
     Base Logging Configuration Class
 

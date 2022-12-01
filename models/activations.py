@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, Union
 import torch
 from torch import nn
 
-from utils import typext, utils
+from utils import baseconfig, utils
 
 
 def make_activation_module(name: str, cfg: Optional[ActivationConfig] = None) -> nn.Module:
@@ -36,14 +36,14 @@ def make_activation_module(name: str, cfg: Optional[ActivationConfig] = None) ->
     raise ValueError(f"{name} not found in {ActivationConst.values()}")
 
 
-class ActivationConst(typext.ConstantHolder):
+class ActivationConst(baseconfig.ConstantHolder):
     NONE = utils.NONE
     RELU = "relu"
     GELU = "gelu"
     LEAKYRELU = "leakyrelu"  # params: negative_slope (default 1/100)
 
 
-class ActivationConfig(typext.ConfigClass):
+class ActivationConfig(baseconfig.ConfigClass):
     """
     Activation function.
 

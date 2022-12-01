@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import torchvision.models as models
 
 from losses.loss import LabelSmoothingLoss
-from utils.configs import MartConfig, MartPathConst
+from utils.configs import Config
 from utils.utils import count_parameters
 from models.activations import gelu
 
@@ -30,7 +30,7 @@ INF = float("inf")
 class RecursiveTransformer(nn.Module):
     def __init__(
         self,
-        cfg: MartConfig,
+        cfg: Config,
         vocab_size: int
     ):
         super().__init__()
@@ -609,7 +609,7 @@ class DecoderLayer(nn.Module):
             attention_mask, max_v_len, max_t_len, decoder=True
         )  # (N, L, L)
         tmp_x = x.clone().cuda()
-        x = self.LayerNorm(x)
+        # x = self.LayerNorm(x)
         att = self.attention(x, shifted_self_mask, clip_his)
         hidden_states = self.rand * tmp_x + (1 - self.rand) * att
         hidden_states = self.LayerNorm(hidden_states)
@@ -772,7 +772,8 @@ class EmbeddingsWithVideo(nn.Module):
         words_embeddings = self.word_fc(self.word_embeddings(input_ids))
         img_embeddings = self.img_embeddings(img_feats)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-        words_embeddings += token_type_embeddings
+        
+        # words_embeddings += token_type_embeddings
         embeddings = words_embeddings + img_embeddings + token_type_embeddings
 
         if self.add_postion_embeddings:
@@ -1052,40 +1053,22 @@ class CLIPloss(nn.Module):
         return cliploss
 
 def create_model(
-    cfg: MartConfig,
+    cfg: Config,
     vocab_size: int,
-    cache_dir: str = MartPathConst.CACHE_DIR,
     verbose: bool = True,
 ) -> nn.Module:
     """
     Args:
-        cfg: Experiment cfg.
-        vocab_size: Vocabulary, calculated in mart as len(train_set.word2idx).
-        cache_dir: Cache directory.
+        cfg: config
+        vocab_size: Vocabulary calc in len(train_set.word2idx).
         verbose: Print model name and number of parameters.
     """
     cfg.max_position_embeddings = cfg.max_v_len + cfg.max_t_len
     cfg.vocab_size = vocab_size
 
-    if cfg.recurrent: # true
+    if cfg.recurrent:
         logger.info("Use recurrent model - Mine")
         model = RecursiveTransformer(cfg, vocab_size=vocab_size)
-    
-    if cfg.use_glove: # false
-        if hasattr(model, "embeddings"):
-            logger.info("Load GloVe as word embedding")
-            model.embeddings.set_pretrained_embedding(
-                torch.from_numpy(
-                    torch.load(
-                        Path(cache_dir) / f"{cfg.dataset_train.name}_vocab_glove.pt"
-                    )
-                ).float(),
-                freeze=cfg.freeze_glove,
-            )
-        else:
-            logger.warning(
-                "This model has no embeddings, cannot load glove vectors into the model"
-            )
 
     # output model properties
     if verbose: # true

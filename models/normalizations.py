@@ -8,8 +8,10 @@ from typing import Any, Dict, List, Optional, Union
 import torch as th
 from torch import nn
 
-from utils.typext import ConfigClass, ConstantHolder
+from utils.baseconfig import ConstantHolder
+from utils.baseconfig import ConfigClass
 from utils import utils
+
 
 
 def make_normalization_module(normalized_shape: Union[int, List[int], th.Size], name: str,

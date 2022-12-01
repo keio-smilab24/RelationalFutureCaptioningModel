@@ -10,8 +10,8 @@ import numpy as np
 import torch as th
 from torch import nn
 
-from utils.typext import INF
-from utils.typext import ConfigClass, ConstantHolder
+from utils.baseconfig import INF
+from utils.baseconfig import ConfigClass, ConstantHolder
 
 from models.initialization import init_network
 

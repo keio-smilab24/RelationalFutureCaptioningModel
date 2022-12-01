@@ -8,8 +8,9 @@ from typing import Any, Dict, List, Optional, Union
 import torch
 from torch import nn
 
-from utils import typext
-from utils.typext import INF
+from utils import baseconfig
+from utils.baseconfig import INF
+from utils.baseconfig import ConfigClass
 
 from models.activations import ActivationConfig, make_activation_module
 
@@ -42,7 +43,7 @@ def make_pooler_module(normalized_shape: Union[int, List[int]], name: str, cfg: 
     raise NotImplementedError(f"Pooler {name} unknown.")
 
 
-class PoolerConst(typext.ConstantHolder):
+class PoolerConst(baseconfig.ConstantHolder):
     """
     Pooler types for coot.
 
@@ -54,7 +55,7 @@ class PoolerConst(typext.ConstantHolder):
     AVG_SPECIAL = "avg_special"
 
 
-class PoolerConfig(typext.ConfigClass):
+class PoolerConfig(ConfigClass):
     """
     Pooling Submodule
 

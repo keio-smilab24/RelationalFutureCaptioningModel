@@ -19,7 +19,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from losses.loss import LabelSmoothingLoss
-from utils.configs import MartConfig
+from utils.configs import Config
 
 INF = 1e10
 
@@ -229,7 +229,7 @@ class Decoder(nn.Module):
 
 
 class MTransformer(nn.Module):
-    def __init__(self, cfg: MartConfig):
+    def __init__(self, cfg: Config):
         super().__init__()
         self.cfg = cfg
         vfeat_size = cfg.video_feature_size

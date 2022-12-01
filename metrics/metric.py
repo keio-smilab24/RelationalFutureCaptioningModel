@@ -16,13 +16,13 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 import torch as th
 from torch.utils.tensorboard import SummaryWriter
 
-from utils import typext
-from utils.typext import ConstantHolder
+from utils import baseconfig
+from utils.baseconfig import ConstantHolder
 from utils.setting import ExperimentFilesHandler
 from utils.utils import LOGGER_NAME
 
 
-class PrintGroupConst(typext.ConstantHolder):
+class PrintGroupConst(baseconfig.ConstantHolder):
     """
     Define metric groups. This is used for creating experiment tables.
     """
@@ -31,7 +31,7 @@ class PrintGroupConst(typext.ConstantHolder):
     PERFORMANCE = "performance"
 
 
-class PrintMetric(typext.TypedNamedTuple):
+class PrintMetric(baseconfig.TypedNamedTuple):
     """
     Define named tuple for string formatting of metrics.
     """
@@ -147,26 +147,6 @@ keys1, keys2 = list(TextMetricsConst.keys()), list(TextMetricsConstEvalCap.keys(
 assert keys1 == keys2, (
     f"Mismatch in text metrics definition, the constant holder classes must match.\n{keys1}\n-----\n{keys2}")
 TRANSLATION_METRICS = {TextMetricsConstEvalCap.get(key): name for key, name in TextMetricsConst.items()}
-
-# TRANSLATION_METRICS = {
-#     "Bleu_1": TextMetricsConst.BLEU_1,
-#     "Bleu_2": TextMetricsConst.BLEU_2,
-#     "Bleu_3": TextMetricsConst.BLEU_3,
-#     "Bleu_4": TextMetricsConst.BLEU_4,
-#     "METEOR": TextMetricsConst.METEOR,
-#     "ROUGE_L": TextMetricsConst.ROUGE_L,
-#     "CIDEr": TextMetricsConst.CIDER,
-#     "re1": TextMetricsConst.RE1,
-#     "re2": TextMetricsConst.RE2,
-#     "re3": TextMetricsConst.RE3,
-#     "re4": TextMetricsConst.RE4,
-#     "submission_vocab_size": TextMetricsConst.SUBMISSION_VOCAB_SIZE,
-#     "submission_avg_sen_len": TextMetricsConst.SUBMISSION_AVG_SEN_LEN,
-#     "submission_num_sen": TextMetricsConst.SUBMISSION_NUM_SEN,
-#     "gt_stat_vocab_size": TextMetricsConst.GT_STAT_VOCAB_SIZE,
-#     "gt_stat_avg_sen_len": TextMetricsConst.GT_STAT_AVG_SEN_LEN,
-#     "gt_stat_num_sen": TextMetricsConst.GT_STAT_NUM_SEN
-# }
 
 TEXT_METRICS = {
     "bleu1": PrintMetric(TextMetricsConst.BLEU_1, "%", 2, MartPrintGroupConst.TEXT, None),

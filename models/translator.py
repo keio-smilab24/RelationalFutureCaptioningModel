@@ -25,7 +25,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from datasets.bila import BilaDataset as RCDataset
-from utils.configs import MartConfig
+from utils.configs import Config
 from models.beam_search import BeamSearch
 from utils import utils
 
@@ -78,7 +78,7 @@ class Translator(object):
     """
 
     def __init__(
-        self, model: nn.Module, cfg: MartConfig, logger: Optional[logging.Logger] = None
+        self, model: nn.Module, cfg: Config, logger: Optional[logging.Logger] = None
     ):
         self.model = model
         self.cfg = cfg

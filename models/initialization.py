@@ -4,7 +4,7 @@ Network initialization.
 import torch as th
 from torch import nn
 
-from utils import typext, utils
+from utils import baseconfig, utils
 
 
 def init_weight_(w: th.Tensor, init_type="uniform", init_std=1) -> None:
@@ -32,7 +32,7 @@ def init_weight_(w: th.Tensor, init_type="uniform", init_std=1) -> None:
         raise RuntimeError(f"unknown init method {init_type}")
 
 
-class InitTypesConst(typext.ConstantHolder):
+class InitTypesConst(baseconfig.ConstantHolder):
     """
     Weight Initialization
 

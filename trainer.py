@@ -23,7 +23,7 @@ import trainer_base
 from trainer_configs import BaseTrainerState
 from datasets.bila import BilaDataset, prepare_batch_inputs
 from utils.utils import get_reference_files, TrainerPathConst
-from utils.configs import MartConfig, MartMetersConst as MMeters
+from utils.configs import Config, MartMetersConst as MMeters
 from utils.setting import ExperimentFilesHandler
 from metrics.evaluate_language import evaluate_language_files
 from metrics.evaluate_repetition import evaluate_repetition_files
@@ -54,17 +54,11 @@ class MartFilesHandler(ExperimentFilesHandler):
 
     def __init__(
         self,
-        exp_group: str,
-        exp_name: str,
-        exp_type: str,
         run_name: str,
-        log_dir: str = TrainerPathConst.DIR_EXPERIMENTS,
-        annotations_dir: str = TrainerPathConst.DIR_ANNOTATIONS,
+        log_dir: str,
+        annotations_dir: str,
     ):
         super().__init__(
-            model_type=exp_type,
-            exp_group=exp_group,
-            exp_name=exp_name,
             run_name=run_name,
             log_dir=log_dir
         )
@@ -102,10 +96,10 @@ class MartModelManager(BaseModelManager):
     Wrapper for MART models.
     """
 
-    def __init__(self, cfg: MartConfig, model: nn.Module):
+    def __init__(self, cfg: Config, model: nn.Module):
         super().__init__(cfg)
         # update config type hints
-        self.cfg: MartConfig = self.cfg
+        self.cfg: Config = self.cfg
         self.model_dict: Dict[str, nn.Module] = {"model": model}
 
 
@@ -125,8 +119,6 @@ class MartTrainer(trainer_base.BaseTrainer):
     Args:
         cfg: Loaded configuration instance.
         model: Model.
-        exp_group: Experiment group.
-        exp_name: Experiment name.
         run_name: Experiment run.
         train_loader_length: Length of the train loader, required for some LR schedulers.
         log_dir: Directory to put results.
@@ -143,11 +135,8 @@ class MartTrainer(trainer_base.BaseTrainer):
 
     def __init__(
         self,
-        cfg: MartConfig,
+        cfg: Config,
         model: nn.Module,
-        exp_group: str,
-        exp_name: str,
-        exp_type: str,
         run_name: str,
         train_loader_length: int,
         *,
@@ -167,9 +156,6 @@ class MartTrainer(trainer_base.BaseTrainer):
 
         # overwrite default experiment files handler
         exp = MartFilesHandler(
-            exp_group=exp_group,
-            exp_name=exp_name,
-            exp_type=exp_type,
             run_name=run_name,
             log_dir=log_dir,
             annotations_dir=annotations_dir
@@ -179,11 +165,8 @@ class MartTrainer(trainer_base.BaseTrainer):
         super().__init__(
             cfg,
             model_mgr,
-            exp_group,
-            exp_name,
             run_name,
             train_loader_length,
-            exp_type,
             log_dir=log_dir,
             log_level=log_level,
             logger=logger,
@@ -196,10 +179,9 @@ class MartTrainer(trainer_base.BaseTrainer):
             exp_files_handler=exp,
         )
         self.model = model
-        # ---------- setup ----------
 
         # update type hints from base classes to inherited classes
-        self.cfg: MartConfig = self.cfg
+        self.cfg: Config = self.cfg
         self.model_mgr: MartModelManager = self.model_mgr
         self.exp: MartFilesHandler = self.exp
 
@@ -224,7 +206,6 @@ class MartTrainer(trainer_base.BaseTrainer):
         for meter_name in TRANSLATION_METRICS.values():
             self.metrics.add_meter(meter_name, use_avg=False)
 
-        # ---------- optimization ----------
 
         self.optimizer = None
         self.lr_scheduler = None
@@ -273,8 +254,6 @@ class MartTrainer(trainer_base.BaseTrainer):
                 schedule="warmup_linear",
             )
 
-        # ---------- Translator ----------
-
         self.translator = Translator(self.model, self.cfg, logger=self.logger)
 
         # post init hook for checkpoint loading
@@ -307,7 +286,7 @@ class MartTrainer(trainer_base.BaseTrainer):
         show_log: bool = False,
     ) -> None:
         if use_wandb:
-            wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}"
+            wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}_change_decoder_laptop"
             wandb.init(name=wandb_name, project="BilaS")
         
         # time book-keeping etc.
@@ -498,7 +477,6 @@ class MartTrainer(trainer_base.BaseTrainer):
 
 
     @torch.no_grad()
-    # TODO : bilas / bila
     def validate_epoch(
         self, data_loader: data.DataLoader, 
         datatype: str="bila"
@@ -648,7 +626,6 @@ class MartTrainer(trainer_base.BaseTrainer):
             pbar.update()
         pbar.close()
 
-        # ---------- validation done ----------
         batch_loss /= batch_idx
         batch_snt_loss /= batch_idx
         batch_rec_loss /= batch_idx
@@ -962,18 +939,6 @@ class MartTrainer(trainer_base.BaseTrainer):
         elif datatype == 'bilas':
             json.dump(batch_res, file_translation_raw.open("wt", encoding="utf8"), ensure_ascii=False)
         
-        """
-        評価指標の計算の元のファイル
-        ここが多分bilaのまま
-        
-        reference_files_map : {'test': [PosixPath('annotations/BILA/captioning_test_para.json')]}
-        self.cfg.dataset_val.name : BILA
-        self.exp.annotations_dir : annotations
-        eval_mode : test
-        reference_files: annotations/BILA/captioning_test_para.json
-        reference_file_single: annotations/BILA/captioning_test_para.json
-        
-        """
         # get reference files (ground truth captions)
         reference_files_map = get_reference_files(
             self.cfg.dataset_val.name, self.exp.annotations_dir, test=True, datatype=datatype,
@@ -982,15 +947,6 @@ class MartTrainer(trainer_base.BaseTrainer):
         reference_file_single = reference_files[0]
 
         # language evaluation
-        """
-        ここで評価指標を計算しているっぽい
-        bila:
-            file_translation_raw : experiments/....//caption/translations_0_test.json
-            reference_files : ['data/BilaS/caption_test.json']
-        bilas:
-            file_translation_raw : experiments/....//caption/translations_0_test.json
-            reference_files : ['data/BilaS/caption_test.json']
-        """
         res_lang = evaluate_language_files(
             file_translation_raw, reference_files, verbose=False, all_scorer=True, datatype=datatype
         )

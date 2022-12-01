@@ -2,22 +2,15 @@
 Definition of constants and configurations for captioning with MART.
 """
 
-from typing import Any, Dict, Optional
+import argparse
+from typing import Any, Dict, List, Optional
 
 import trainer_configs
-from utils.typext import ConstantHolder
-
-
-# ---------- Path constants ----------
-class MartPathConst(ConstantHolder):
-    CACHE_DIR = "cache_caption"
-    COOT_FEAT_DIR = "provided_embeddings"
-    ANNOTATIONS_DIR = "data"
-    VIDEO_FEATURE_DIR = "data/mart_video_feature"
+from utils.baseconfig import ConfigClass, ConstantHolder
 
 
 # ---------- MART config ----------
-class MartDatasetConfig(trainer_configs.BaseDatasetConfig):
+class DatasetConfig(ConfigClass):
     """
     MART Dataset Configuration class
 
@@ -26,11 +19,17 @@ class MartDatasetConfig(trainer_configs.BaseDatasetConfig):
     """
 
     def __init__(self, config: Dict) -> None:
-        super().__init__(config)
+        # general dataset info
+        self.name: str = config.pop("name")
+        self.split: str = config.pop("split")
+        # general dataloader configuration
+        self.shuffle: bool = config.pop("shuffle")
+        self.pin_memory: bool = config.pop("pin_memory")
+        self.num_workers: int = config.pop("num_workers")
         self.preload: bool = config.pop("preload")
 
 
-class MartConfig(trainer_configs.BaseExperimentConfig):
+class Config(trainer_configs.BaseExperimentConfig):
     """
     Args:
         config: Configuration dictionary to be loaded, logging part.
@@ -102,11 +101,10 @@ class MartConfig(trainer_configs.BaseExperimentConfig):
         # mandatory groups, needed for nntrainer to work correctly
         self.train = trainer_configs.BaseTrainConfig(config.pop("train"))
         self.val = trainer_configs.BaseValConfig(config.pop("val"))
-        self.dataset_train = MartDatasetConfig(config.pop("dataset_train"))
-        self.dataset_val = MartDatasetConfig(config.pop("dataset_val"))
+        self.dataset_train = DatasetConfig(config.pop("dataset_train"))
+        self.dataset_val = DatasetConfig(config.pop("dataset_val"))
         self.logging = trainer_configs.BaseLoggingConfig(config.pop("logging"))
         self.saving = trainer_configs.BaseSavingConfig(config.pop("saving"))
-
         # more training
         self.label_smoothing: float = config.pop("label_smoothing")
 
@@ -157,8 +155,6 @@ class MartConfig(trainer_configs.BaseExperimentConfig):
         self.mtrans: bool = config.pop("mtrans")
         self.xl: bool = config.pop("xl")
         self.xl_grad: bool = config.pop("xl_grad")
-        self.use_glove: bool = config.pop("use_glove")
-        self.freeze_glove: bool = config.pop("freeze_glove")
 
         # optimization
         self.ema_decay: float = config.pop("ema_decay")
@@ -219,3 +215,105 @@ class MartMetersConst(ConstantHolder):
     VAL_LOSS_PER_WORD = "val/loss_word"
     VAL_ACC = "val/acc"
     GRAD = "train/grad"
+
+
+def update_config_from_args(config: Dict, args: argparse.Namespace, *, verbose: bool = True) -> Dict[str, Any]:
+    """
+    Modify config and paths given script arguments.
+
+    Args:
+        config: Config dictionary.
+        args: Arguments.
+        verbose: Print message when updating the config.
+
+    Returns:
+        Updated config dict.
+    """
+    # parse the --config inline modifier
+    if args.config is not None:
+        # get all fields to update from the argument and loop them
+        update_fields: List[str] = args.config.split(",")
+        for field_value in update_fields:
+            # get field and value
+            fields_str, value = field_value.strip().split("=")
+            # convert value if necessary
+            try:
+                value = float(value)
+                if round(value) == value:
+                    value = int(value)
+            except ValueError:
+                pass
+            if str(value).lower() == "true":
+                value = True
+            elif str(value).lower() == "false":
+                value = False
+            # update the correct nested dictionary field
+            fields = fields_str.split(".")
+            current_dict = config
+            for i, field in enumerate(fields):
+                if i == len(fields) - 1:
+                    # update field
+                    if field not in current_dict:
+                        assert "same_as" in current_dict, (
+                            f"Field {fields_str} not found in config {list(current_dict.keys())}. "
+                            f"Typo or field missing in config.")
+                    current_dict[field] = value
+                    if verbose:
+                        print(f"    Change config: Set {fields_str} = {value}")
+                    break
+                # go one nesting level deeper
+                current_dict = current_dict[field]
+
+    if args.workers is not None:
+        config["dataset_train"]["num_workers"] = int(args.workers)
+        config["dataset_val"]["num_workers"] = int(args.workers)
+        if verbose:
+            print(f"    Change config: Set dataloader workers to {args.workers} for train and val.")
+
+    if args.seed is not None:
+        if str(args.seed).lower() in ["none", "null"]:
+            config["random_seed"] = None
+        else:
+            config["random_seed"] = int(args.seed)
+        if verbose:
+            print(f"    Change config: Set seed to {args.seed}. Deterministic")
+
+    if args.no_cuda:
+        config["use_cuda"] = False
+        if verbose:
+            print(f"    Change config: Set use_cuda to False.")
+
+    if args.single_gpu:
+        config["use_multi_gpu"] = False
+        if verbose:
+            print(f"    Change config: Set use_multi_gpu to False.")
+    
+    # dataset / model
+    if args.debug:
+        config["debug"] = True
+        if verbose:
+            print(f"    Change config: Set debug to True")
+    if args.dataset_max is not None:
+        assert args.dataset_max > 0, "--dataset_max must be positive int."
+        config["dataset_train"]["max_datapoints"] = args.dataset_max
+        config["dataset_val"]["max_datapoints"] = args.dataset_max
+        if verbose:
+            print(
+                f"    Change config: Set dataset_(train|val).max_datapoints to {args.dataset_max}"
+            )
+    config["train"]["batch_size"] = args.batch_size
+    config["label_smoothing"] = args.label_smoothing
+    if args.preload:
+        config["dataset_train"]["preload"] = True
+        config["dataset_val"]["preload"] = True
+        if verbose:
+            print(f"    Change config: Set dataset_(train|val).preload to True")
+    if args.no_preload or args.validate:
+        config["dataset_train"]["preload"] = False
+        config["dataset_val"]["preload"] = False
+        if verbose:
+            print(
+                f"    Change config: Set dataset_(train|val).preload to False (--no_preload or --validate)"
+            )
+
+    return config

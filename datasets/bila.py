@@ -17,8 +17,8 @@ from torch.utils.data.dataloader import default_collate
 from tqdm import tqdm
 import cv2
 
-from utils.configs import MartConfig, MartPathConst
-from utils.typext import ConstantHolder
+from utils.configs import Config
+from utils.baseconfig import ConfigClass, ConstantHolder
 
 class DataTypesConstCaption(ConstantHolder):
     """
@@ -561,8 +561,8 @@ def step_collate(padded_batch_step):
 
 
 def create_datasets_and_loaders(
-    cfg: MartConfig,
-    annotations_dir: str = MartPathConst.ANNOTATIONS_DIR,
+    cfg: Config,
+    annotations_dir: str,
     datatype: str = 'bila',
 ) -> Tuple[BilaDataset, BilaDataset, DataLoader, DataLoader]:
     # create the dataset

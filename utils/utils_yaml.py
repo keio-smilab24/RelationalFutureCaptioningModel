@@ -10,7 +10,7 @@ from collections import Mapping as CollectionsMapping
 import yaml
 
 
-def load_yaml_config_file(yaml_file: Union[str, Path]) -> Dict[str, Any]:
+def load_yaml_to_config(yaml_file: Union[str, Path]) -> Dict[str, Any]:
     """
     Load given yaml file. Supports loading scientific floats like 1e-8 as python floats. Preserves key order.
 
@@ -30,9 +30,6 @@ def convert_yaml_to_dict(yaml_str: str) -> Dict[str, Any]:
 
     Args:
         yaml_str: String to load
-
-    Returns:
-        Loaded config as nested dict.
 
     Returns:
         Loaded config as nested dict.
@@ -134,7 +131,7 @@ def dump_yaml_config_file(filename: str, config_dict: Dict[str, Any]) -> None:
     Path(filename).open("wt", encoding="utf8").write(s)
 
     # make sure that if it's converted back via yaml, it's still the same dict
-    test_config_dict = load_yaml_config_file(filename)
+    test_config_dict = load_yaml_to_config(filename)
     if config_dict != test_config_dict:
         # verbose error printing
         print("---------- Original config:")

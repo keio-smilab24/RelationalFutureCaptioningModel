@@ -5,21 +5,19 @@ import random
 import os
 import sys
 from pathlib import Path
-from collections import defaultdict
 from copy import deepcopy
 from json import JSONEncoder
 from typing import Any, Dict, List, Optional, Union, Tuple
 import ctypes
 import multiprocessing
 
-import pathspec
 import numpy as np
 import torch
 import GPUtil
 import psutil
 
-from utils import typext
-from utils.typext import ConstantHolder
+from utils import baseconfig
+from utils.baseconfig import ConstantHolder
 
 DEFAULT = "default"
 REF = "ref"
@@ -317,93 +315,6 @@ def check_config_dict(name: str, config: Dict[str, Any], strict: bool = True) ->
                 raise ValueError(err_msg)
             logging.getLogger(LOGGER_NAME).warning(err_msg)
 
-
-def create_string_matcher(pattern: Union[str, List[str]]) -> pathspec.PathSpec:
-    """
-    Given one or several patterns with the syntax of a .gitignore file, create a matcher object that can
-    be used to match strings against the pattern.
-
-    Args:
-        pattern: One or several patterns.
-
-    Returns:
-        PathSpec matcher object.
-    """
-    if isinstance(pattern, str):
-        pattern = [pattern]
-    matcher = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, pattern)
-    return matcher
-
-
-def match_folder(folder: Union[str, Path], exp_type: str, exp_group: str = None,
-                 exp_list: Optional[Union[Path, str]] = None, search: Optional[str] = None) -> Dict[str, List[str]]:
-    """
-    Match experiments in a folder.
-
-    Args:
-        folder: Folder of experiments to match, should be setup like FOLDER/EXP_TYPE/EXP_GROUP/EXP_NAME
-        exp_type:
-        exp_group:
-        exp_list:
-        search:
-
-    Returns:
-        Dictionary of experiment groups with a list of experiment names each.
-    """
-    logger = logging.getLogger(LOGGER_NAME)
-    assert not (exp_list is not None and exp_group is not None), (
-        "Cannot provide --exp_list and --exp_group at the same time.")
-
-    # determine experiment group/name combinations to search
-    exp_matcher_raw = []
-    if exp_list is not None:
-        # get experiment groups to search in from list
-        exp_list_lines = Path(exp_list).read_text(encoding="utf8").splitlines(keepends=False)
-        for line in exp_list_lines:
-            line = line.strip()
-            if line == "" or line[0] == "#":
-                continue
-            exp_matcher_raw.append(line)
-    elif exp_group is not None:
-        # get experiment groups from the argument
-        for group in exp_group.split(","):
-            exp_matcher_raw.append(group.strip())
-    else:
-        # include all groups and experiments
-        exp_matcher_raw.append("*")
-    matcher = create_string_matcher(exp_matcher_raw)
-
-    # determine experiment name to search
-    search_names = []
-    if search is None:
-        search_names.append("*")
-    else:
-        for name in search.split(","):
-            search_names.append(name.strip())
-    name_matcher = create_string_matcher(search_names)
-
-    # determine root path and print infos
-    root_path = Path(folder) / exp_type
-
-    logger.info(f"Matching in {root_path} for --exp_group {exp_matcher_raw}, names --search {search_names}")
-
-    # get all experiments and groups
-    found = defaultdict(list)
-    for new_exp_group in sorted(os.listdir(root_path)):
-        for new_exp_name in sorted(os.listdir(root_path / new_exp_group)):
-            # when searching configs, remove the .yaml ending
-            if new_exp_name.endswith(".yaml"):
-                new_exp_name = new_exp_name[:-5]
-            # match group and name
-            match_str = f"{new_exp_group}/{new_exp_name}"
-            if matcher.match_file(match_str) and name_matcher.match_file(new_exp_name):
-                found[new_exp_group].append(new_exp_name)
-
-    logger.debug(f"Found: {found}")
-
-    return found
-
-
 class BetterJSONEncoder(JSONEncoder):
     """
     Enable the JSON encoder to handle Path objects.
@@ -419,7 +330,7 @@ class BetterJSONEncoder(JSONEncoder):
 
 # ---------- Constants ----------
 
-class ConfigNamesConst(typext.ConstantHolder):
+class ConfigNamesConst(baseconfig.ConstantHolder):
     """
     Stores configuration group names.
     """
@@ -433,20 +344,19 @@ class ConfigNamesConst(typext.ConstantHolder):
     LR_SCHEDULER = "lr_scheduler"
 
 
-class TrainerPathConst(typext.ConstantHolder):
+class TrainerPathConst():
     """
     Stores directory and file names for training.
     """
     DIR_CONFIG = "config"
     DIR_EXPERIMENTS = "results"
     DIR_LOGS = "logs"
-    DIR_MODELS = "models"
+    DIR_MODELS = "models" 
     DIR_METRICS = "metrics"
     DIR_EMBEDDINGS = "embeddings"
     DIR_TB = "tb"
-    DIR_PROFILING = "profiling"
     DIR_CAPTION = "caption"
-    DIR_ANNOTATIONS = "data"
+    DIR_ANNOTATIONS = "data" 
     FILE_PREFIX_TRAINERSTATE = "trainerstate"
     FILE_PREFIX_MODEL = "model"
     FILE_PREFIX_MODELEMA = "modelema"
@@ -455,13 +365,9 @@ class TrainerPathConst(typext.ConstantHolder):
     FILE_PREFIX_METRICS_STEP = "metrics_step"
     FILE_PREFIX_METRICS_EPOCH = "metrics_epoch"
     FILE_PREFIX_TRANSL_RAW = "translations"
-    FILE_PREFIX_TRANSL_LANG = "results_lang"
-    FILE_PREFIX_TRANSL_STAT = "results_stat"
-    FILE_PREFIX_TRANSL_REP = "results_rep"
-    FILE_PREFIX_TRANSL_METRICS = "text_metrics"
 
 
-class MetricComparisonConst(typext.ConstantHolder):
+class MetricComparisonConst(baseconfig.ConstantHolder):
     """
     Fields for the early stopper.
     """
@@ -491,7 +397,7 @@ def fix_seed(seed: int, cudnn_deterministic: bool=False, cudnn_benchmark: bool=T
 
 def get_reference_files(
     dset_name: str,
-    annotations_dir: Union[str, Path] = TrainerPathConst.DIR_ANNOTATIONS,
+    annotations_dir: Union[str, Path],
     test: bool = False,
     datatype: str = 'bila',
 ) -> Dict[str, List[Path]]:
@@ -524,7 +430,6 @@ def get_reference_files(
             return {"test": [annotations_dir / "captioning_test_para.json"]}
         else:
             return {"val": [annotations_dir / "captioning_val_para.json"]}
-    # TODO : bilas / bila
     if dset_name == "BILA":
         if datatype == 'bila':
             if test:

@@ -1,4 +1,5 @@
 import argparse
+from email.policy import default
 import glob
 import json
 import os
@@ -13,74 +14,34 @@ from utils.utils import TrainerPathConst
 from trainer_configs import BaseTrainerState
 
 
-def setup_experiment_identifier_from_args(args: argparse.Namespace) -> Tuple[str, str, str]:
+def get_config_file(args: argparse.Namespace) -> Tuple[str, str, str]:
     """
     Summary:
-        実験の各種設定を返す関数
-
-    Args:
-        args: Arguments.
-        exp_type: Experiment type.
-
-    Returns:
-        group, name, config file.
+        使用するconfig fileを返す
+        指定されていない場合 defaultのconfig fileを返す
     """
     if args.config_file is None:
-        exp_group = args.exp_group
-        exp_name = args.exp_name
-        exp_type = args.exp_type
-        config_file = setup_default_yaml_file(exp_name, config_dir=args.config_dir)
-    
+        config_file = Path(args.config_dir, f"{default}.yaml")
     else:
-        exp_group = args.exp_group
-        exp_name = ".".join(str(Path(args.config_file).parts[-1]).split(".")[:-1])
-        exp_type = args.exp_type
         config_file = args.config_file
+    print(f"config file: {config_file}")
     
-    print(f"Source config: {config_file}")
-    print(f"Results path:  {args.log_dir}/{exp_type}/{exp_group}/{exp_name}")
-    
-    return exp_group, exp_name, exp_type, config_file
-
-
-def setup_default_yaml_file(
-        exp_name: str, config_dir: str = TrainerPathConst.DIR_CONFIG) -> Path:
-    """
-    Summary:
-        config fileが与えられなかったときに、
-        defaultのyamlファイルへのpathを返す
-
-    Args:
-        config_dir: Config directory :(config)
-        exp_name: Experiment name    :(default)
-
-    Returns:
-        Path to config yaml.
-        config/exp_name.yaml
-    """
-    return Path(config_dir, f"{exp_name}.yaml")
-
+    return config_file
 
 class ExperimentFilesHandler:
     """
     Helper to handle with file locations, metrics etc.
 
     Args:
-        model_type: Experiment type (retrieval, captioning, ...)
-        exp_group: Experiment group.
-        exp_name: Experiment name.
         run_name: Name of a single run.
         log_dir: Save directory for experiments.
     """
 
     def __init__(
-            self, model_type: str, exp_group: str, exp_name: str, run_name: str, *,
+            self, run_name: str, *,
             log_dir: str = TrainerPathConst.DIR_EXPERIMENTS):
-        self.exp_group: str = exp_group
-        self.exp_name: str = exp_name
         self.run_name: str = run_name
-        self.model_type: str = model_type
-        self.path_base: Path = Path(log_dir, "{}_{}".format(self.exp_name, self.run_name))
+        self.path_base: Path = Path(log_dir, "{}".format(self.run_name))
         self.path_logs = self.path_base / TrainerPathConst.DIR_LOGS
         self.path_models = self.path_base / TrainerPathConst.DIR_MODELS
         self.path_metrics = self.path_base / TrainerPathConst.DIR_METRICS
@@ -259,16 +220,3 @@ class ExperimentFilesHandler:
             Path
         """
         return self.path_metrics / f"{TrainerPathConst.FILE_PREFIX_METRICS_EPOCH}_{epoch}.json"
-
-    def get_profile_file(self) -> Path:
-        """
-        Get file path for storing profiling results.
-
-        Returns:
-            Path.
-        """
-        profile_dir = Path("profiles") / self.exp_group
-        pro_file = profile_dir / (self.exp_name + ".json")
-        if pro_file.is_file():
-            return json.load(pro_file.open("rt", encoding="utf8"))
-        return None

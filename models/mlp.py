@@ -6,10 +6,11 @@ from typing import Any, Dict, List, Optional
 
 from torch import nn
 
-from utils import typext, utils
+from utils import baseconfig, utils
+from utils.baseconfig import ConfigClass
 import models
 
-class ResidualsEnum(typext.ConstantHolder):
+class ResidualsEnum(baseconfig.ConstantHolder):
     """
     Residuals.
 
@@ -22,7 +23,7 @@ class ResidualsEnum(typext.ConstantHolder):
     LINEAR = "linear"
 
 
-class MLPConfig(typext.ConfigClass):
+class MLPConfig(ConfigClass):
     """
     MLP Submodule
 

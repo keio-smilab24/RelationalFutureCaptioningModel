@@ -6,23 +6,22 @@ import numpy as np
 from trainer import MartTrainer
 from models.model import create_model
 from datasets.bila import create_datasets_and_loaders
-from utils.utils_yaml import load_yaml_config_file
+from utils.utils_yaml import load_yaml_to_config
 from utils.utils import fix_seed
-from utils.arguments import update_mart_config_from_args, set_parser, update_config_from_args
-from utils.setting import setup_experiment_identifier_from_args
-from utils.configs import MartConfig as Config
+from utils.arguments import set_parser
+from utils.setting import get_config_file
+from utils.configs import Config, update_config_from_args
 
 
 def main():
     args = set_parser()
 
-    # load repository config yaml file to dict
-    exp_group, exp_name, exp_type, config_file = setup_experiment_identifier_from_args(args)
-    config = load_yaml_config_file(config_file)
+    # load config file to dict
+    config_file = get_config_file(args)
+    config = load_yaml_to_config(config_file)
 
-    # update experiment config given the script arguments
+    # update config given the arguments
     config = update_config_from_args(config, args)
-    config = update_mart_config_from_args(config, args)
 
     # read experiment config dict
     cfg = Config(config)
@@ -46,7 +45,7 @@ def main():
         run_number = datetime.datetime.now()
         run_name = f"{args.run_name}{run_number}"
 
-        model = create_model(cfg, len(train_set.word2idx), cache_dir=args.cache_dir)
+        model = create_model(cfg, len(train_set.word2idx))
 
         if args.print_model and i == 0:
             print(model)
@@ -55,7 +54,7 @@ def main():
         load_best = args.load_best or args.validate
 
         trainer = MartTrainer(
-            cfg, model, exp_group, exp_name, exp_type, run_name, len(train_loader), log_dir=args.log_dir,
+            cfg, model, run_name, len(train_loader), log_dir=args.log_dir,
             log_level=args.log_level, logger=None, print_graph=args.print_graph, reset=args.reset, load_best=load_best,
             load_epoch=args.load_epoch, load_model=args.load_model, inference_only=args.validate,
             annotations_dir=args.data_dir)

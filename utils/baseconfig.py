@@ -25,7 +25,6 @@ from pydantic import BaseModel
 INF = 32752  # infinity expressed in float16, this is large enough s.t. exp(-INF) == 0
 TENSOR_TYPES = (th.Tensor, np.ndarray)
 
-
 class ConfigClass:
     """
     Base class for config storage classes. Defines representation for printing.

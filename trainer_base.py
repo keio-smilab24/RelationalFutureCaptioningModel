@@ -40,8 +40,6 @@ class BaseTrainer:
     Args:
         cfg: Loaded configuration instance.
         model_mgr: Model manager.
-        exp_group: Experiment group.
-        exp_name: Experiment name.
         run_name: Experiment run.
         train_loader_length: Length of the train loader, required for some LR schedulers.
         model_type:
@@ -58,8 +56,8 @@ class BaseTrainer:
     """
 
     def __init__(
-            self, cfg: trainer_configs.DefaultExperimentConfig, model_mgr: models.BaseModelManager, exp_group: str,
-            exp_name: str, run_name: str, train_loader_length: int, model_type: str, *,
+            self, cfg: trainer_configs.DefaultExperimentConfig, model_mgr: models.BaseModelManager,
+            run_name: str, train_loader_length: int, *,
             log_dir: str = "experiments", log_level: Optional[int] = None, logger: Optional[logging.Logger] = None,
             print_graph: bool = False, reset: bool = False, load_best: bool = False, load_epoch: Optional[int] = None,
             load_model: Optional[str] = None, is_test: bool = False, exp_files_handler: ExperimentFilesHandler = None):
@@ -78,7 +76,7 @@ class BaseTrainer:
         # create experiment helper for directories, if it wasn't already overwritten by the base trainer
         self.exp = exp_files_handler
         if self.exp is None:
-            self.exp = ExperimentFilesHandler(model_type, exp_group, exp_name, run_name, log_dir=log_dir)
+            self.exp = ExperimentFilesHandler(run_name, log_dir=log_dir)
             self.exp.setup_dirs(reset=reset)
 
         # setup logging
@@ -296,7 +294,7 @@ class BaseTrainer:
         # calculate number of bad epochs
         bad_epochs = current_epoch - best_epoch
         # log infos
-        self.logger.info(f"Experiment ---------- {self.exp.exp_group}/{self.exp.exp_name}/{self.exp.run_name} "
+        self.logger.info(f"Experiment ---------- {self.exp.run_name} "
                          f"---------- epoch current/best/bad: {current_epoch}/{best_epoch}/{bad_epochs}")
         if bad_epochs >= self.cfg.val.det_best_terminate_after:
             # stop early

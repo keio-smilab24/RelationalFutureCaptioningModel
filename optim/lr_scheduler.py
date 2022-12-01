@@ -17,7 +17,8 @@ from typing import Dict, List, Optional, Tuple
 
 from torch.optim.optimizer import Optimizer
 
-from utils import typext, utils
+from utils import baseconfig, utils
+from utils.baseconfig import ConfigClass
 
 
 def make_lr_scheduler(optimizer: Optimizer, cfg: SchedulerConfig, base_lr: float, num_epochs: int,
@@ -54,7 +55,7 @@ def make_lr_scheduler(optimizer: Optimizer, cfg: SchedulerConfig, base_lr: float
 
 # ---------- Configuration ----------
 
-class SchedulerConfig(typext.ConfigClass):
+class SchedulerConfig(ConfigClass):
     """
     Scheduler Configuration Class
 
@@ -77,7 +78,7 @@ class SchedulerConfig(typext.ConfigClass):
             self.rop_min_lr_factor: float = config.pop("rop_min_lr_factor")
 
 
-class SchedulerConst(typext.ConstantHolder):
+class SchedulerConst(baseconfig.ConstantHolder):
     """
     Store lr scheduler names.
     """
@@ -85,7 +86,7 @@ class SchedulerConst(typext.ConstantHolder):
     REDUCE_OPW = "reduce_opw"  # Reduce on Plateau with Warmup
 
 
-class SchedulerWarmupConst(typext.ConstantHolder):
+class SchedulerWarmupConst(baseconfig.ConstantHolder):
     """
     Store Warmup Types for the Reduce On Plateau Scheduler.
 
