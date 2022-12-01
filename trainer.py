@@ -31,7 +31,7 @@ from metrics.evaluate_stats import evaluate_stats_files
 from metrics.metric import TRANSLATION_METRICS, TextMetricsConst, TextMetricsConstEvalCap
 from optim.optim import BertAdam, EMA
 from models.translator import Translator
-from models import BaseModelManager
+from models.model_manager_base import BaseModelManager
 
 
 def cal_performance(pred, gold):

@@ -41,3 +41,33 @@ class LabelSmoothingLoss(nn.Module):
         model_prob = self.one_hot.repeat(target.size(0), 1)
         model_prob.scatter_(1, target.unsqueeze(1), self.confidence)
         return F.kl_div(output, model_prob, reduction="sum")
+
+class CLIPloss(nn.Module):
+    """
+    CLIPで用いられているloss
+    https://cdn.openai.com/papers/Learning_Transferable_Visual_Models_From_Natural_Language_Supervision.pdf
+    """
+    def __init__(
+        self,
+        hidden_dim: int=768,
+        max_t_length: int=22,):
+        super().__init__()
+        self.w = nn.Linear(max_t_length * hidden_dim, hidden_dim)
+        self.t = torch.randn(1, requires_grad=True).cuda()
+        self.i_loss = nn.CrossEntropyLoss(ignore_index=0)
+        self.t_loss = nn.CrossEntropyLoss(ignore_index=1)
+        self.norm_i = nn.LayerNorm(hidden_dim)
+        self.norm_t = nn.LayerNorm(hidden_dim)
+
+    def forward(self, clip, text):
+        text = torch.flatten(text, 1)
+        text = self.w(text)
+        i_e = self.norm_i(clip)
+        t_e = self.norm_t(text)
+        logits = torch.matmul(i_e, torch.t(t_e)) * torch.exp(self.t)
+        n = i_e.shape[0]
+        labels = torch.arange(n, device=torch.device("cuda"))
+        loss_i = self.i_loss(logits, labels)
+        loss_t = self.t_loss(logits, labels)
+        cliploss = (loss_i + loss_t) / 2
+        return cliploss

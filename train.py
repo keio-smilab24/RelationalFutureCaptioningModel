@@ -42,8 +42,8 @@ def main():
         create_datasets_and_loaders(cfg, args.data_dir, datatype=args.datatype)
 
     for i in range(args.start_run):
-        run_number = datetime.datetime.now()
-        run_name = f"{args.run_name}{run_number}"
+        run_date = datetime.datetime.now()
+        run_name = f"{args.run_name}{run_date}"
 
         model = create_model(cfg, len(train_set.word2idx))
 

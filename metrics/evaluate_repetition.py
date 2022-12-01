@@ -144,7 +144,7 @@ def evaluate_repetition(data_predicted, data_gt, verbose=False):
     )
     return repetition_scores
 
-# TODO : bilas bila
+
 def evaluate_repetition_files(
     submission_file: str,
     reference_file: str,

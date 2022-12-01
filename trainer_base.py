@@ -16,7 +16,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.optim import Optimizer
 from torch.utils.data.dataloader import DataLoader
 
-import models
+from models.model_manager_base import BaseModelManager
 import trainer_configs
 from utils import utils_yaml
 from utils import utils
@@ -56,7 +56,7 @@ class BaseTrainer:
     """
 
     def __init__(
-            self, cfg: trainer_configs.DefaultExperimentConfig, model_mgr: models.BaseModelManager,
+            self, cfg: trainer_configs.DefaultExperimentConfig, model_mgr: BaseModelManager,
             run_name: str, train_loader_length: int, *,
             log_dir: str = "experiments", log_level: Optional[int] = None, logger: Optional[logging.Logger] = None,
             print_graph: bool = False, reset: bool = False, load_best: bool = False, load_epoch: Optional[int] = None,
@@ -65,7 +65,7 @@ class BaseTrainer:
         self.is_test: bool = is_test
 
         # save model manager
-        self.model_mgr: models.BaseModelManager = model_mgr
+        self.model_mgr: BaseModelManager = model_mgr
 
         # create empty trainer state
         self.state = trainer_configs.BaseTrainerState()

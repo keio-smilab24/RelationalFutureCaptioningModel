@@ -40,7 +40,7 @@ def get_sen_stat(list_of_str):
     full_vocab = set([item for sublist in tokenized for item in sublist])
     return {"vocab_size": len(full_vocab), "avg_sen_len": avg_len, "num_sen": num_sen}
 
-# TODO : bilas / bila
+
 def evaluate_stats_files(
     submission_file: str,
     reference_file: str,
