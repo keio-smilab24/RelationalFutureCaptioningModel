@@ -1,9 +1,8 @@
 """
 エラー分析用スクリプト
-結果のファイルからタイムスタンプ，生成文，正解文を取り出して
+結果のファイルからタイムスタンプ,生成文,正解文を取り出して
 出力用ファイルにクリップごとに並べて出力
-結果ディレクトリ：./experiments/caption/default/yc2_100m_coot_clip_mart_run(日時)
-                /caption/
+結果ディレクトリ:./results/XXX/caption
 """
 
 import sys

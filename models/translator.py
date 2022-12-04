@@ -175,30 +175,23 @@ class Translator(object):
         self,
         model_inputs,
         use_beam=False,
-        recurrent=True,
-        untied=False,
-        xl=False,
-        mtrans=False,
     ):
         """
         while we used *_list as the input names, they could be non-list for single sentence decoding case
         """
-        if recurrent:
-            # input_ids_list, video_features_list, input_masks_list, token_type_ids_list = model_inputs
-            # future
-            (
-                input_ids_list,
-                video_features_list,
-                input_masks_list,
-                token_type_ids_list,
-            ) = model_inputs
-            return self.translate_batch_greedy(
-                input_ids_list,
-                video_features_list,
-                input_masks_list,
-                token_type_ids_list,
-                self.model,
-            )
+        (
+            input_ids_list,
+            video_features_list,
+            input_masks_list,
+            token_type_ids_list,
+        ) = model_inputs
+        return self.translate_batch_greedy(
+            input_ids_list,
+            video_features_list,
+            input_masks_list,
+            token_type_ids_list,
+            self.model,
+        )
 
     @classmethod
     def prepare_video_only_inputs(cls, input_ids, input_masks, segment_ids):

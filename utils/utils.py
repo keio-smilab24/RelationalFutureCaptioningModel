@@ -47,7 +47,7 @@ class LogLevelsConst(ConstantHolder):
 
 
 def create_logger_without_file(name: str, log_level: int = LogLevelsConst.INFO, no_parent: bool = False,
-                               no_print: bool = False) -> logging.Logger:
+                                no_print: bool = False) -> logging.Logger:
     """
     Create a stdout only logger.
 
@@ -143,8 +143,8 @@ def print_logger_info(logger: logging.Logger) -> None:
 
 
 class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter,
-                      argparse.RawDescriptionHelpFormatter,
-                      argparse.MetavarTypeHelpFormatter):
+                        argparse.RawDescriptionHelpFormatter,
+                        argparse.MetavarTypeHelpFormatter):
     """
     Custom formatter
     - raw descriptions (no removing newlines)

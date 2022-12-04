@@ -37,10 +37,9 @@ def make_dict(train_caption_file, word2idx_filepath, datatype: str="bila"):
             train_caption_file: annotations/BILA/captioning_train.json
             word2idx_filepath: annotations/ponnet_word2idx.json
         After:
-            train_caption_file: data/BillaS/bilas_mecab.jsonl
-            word2idx_filepath: data/BillaS/ponnet_word2idx.json
+            train_caption_file: data/BilaS/bilas_mecab.jsonl
+            word2idx_filepath: data/BilaS/ponnet_word2idx.json
     '''
-
     if datatype == "bila":
         max_words = 0
         sentence_list = []
@@ -113,11 +112,9 @@ class BilaDataset(data.Dataset):
         max_v_len: int,
         max_n_sen: int,
         mode: str="train",
-        recurrent: bool=True,
-        untied: bool=False,
         annotations_dir: str = "data",
         preload: bool = False,
-        datatype: str = "bilas",
+        datatype: str = "bila",
     ):
         self.datatype = datatype
 
@@ -140,13 +137,6 @@ class BilaDataset(data.Dataset):
         # Train or val mode
         self.mode = mode        # train
         self.preload = preload  # False
-
-        # Recurrent or untied, different data styles for different models
-        self.recurrent = recurrent  # True
-        self.untied = untied        # False
-        assert not (
-            self.recurrent and self.untied
-        ), "untied and recurrent cannot be True for both"
 
         # ---------- Load metadata ----------
 
@@ -175,7 +165,7 @@ class BilaDataset(data.Dataset):
             raise ValueError(
                 f"Mode must be [train, val] for {self.dataset_name}, got {mode}"
             )
-
+        
         if datatype == 'bila':
             self.word2idx_file = (
                 self.annotations_dir / self.dataset_name / "ponnet_word2idx.json"
@@ -233,8 +223,8 @@ class BilaDataset(data.Dataset):
         self.preloading_done = False
 
     def __len__(self):
-        return len(self.data)
-        # return int(len(self.data)/20)
+        # return len(self.data)
+        return int(len(self.data)/20)
 
     def __getitem__(self, index):
         items, meta = self.convert_example_to_features(self.data[index])
@@ -339,11 +329,6 @@ class BilaDataset(data.Dataset):
             rec_img,
             img_list,
         )
-        """
-        # TODO : memo
-        # single_video_features: video特徴量を含むdict
-        ここリストにする意味ある？
-        """
         
         single_video_features.append(data)
         single_video_meta.append(meta)
@@ -573,8 +558,6 @@ def create_datasets_and_loaders(
         cfg.max_v_len,
         cfg.max_n_sen,
         mode="train",
-        recurrent=cfg.recurrent,
-        untied=cfg.untied or cfg.mtrans,
         annotations_dir=annotations_dir,
         preload=cfg.dataset_train.preload,
         datatype=datatype,
@@ -588,8 +571,6 @@ def create_datasets_and_loaders(
         cfg.max_v_len,
         max_n_sen_val,
         mode="val",
-        recurrent=cfg.recurrent,
-        untied=cfg.untied or cfg.mtrans,
         annotations_dir=annotations_dir,
         preload=cfg.dataset_val.preload,
         datatype=datatype,
@@ -617,8 +598,6 @@ def create_datasets_and_loaders(
         cfg.max_v_len,
         max_n_sen_val,
         mode="test",
-        recurrent=cfg.recurrent,
-        untied=cfg.untied or cfg.mtrans,
         annotations_dir=annotations_dir,
         preload=cfg.dataset_val.preload,
         datatype=datatype,

@@ -1,44 +1,53 @@
 """
 Trainer for retrieval training and validation. Holds the main training loop.
 """
-
+import os
+import datetime
 import json
 import logging
-import os
 from collections import defaultdict
 from collections.abc import Mapping
 from pathlib import Path
 from timeit import default_timer as timer
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 from torch import nn
+from torch.backends import cudnn
+from torch.cuda.amp import GradScaler
 from torch.cuda.amp import autocast
+from torch.nn.utils import clip_grad_norm_
+from torch.optim import Optimizer
 from torch.utils import data
 from tqdm import tqdm
 import wandb
 
-import trainer_base
-from trainer_configs import BaseTrainerState
 from datasets.bila import BilaDataset, prepare_batch_inputs
-from utils.utils import get_reference_files, TrainerPathConst
-from utils.configs import Config, MartMetersConst as MMeters
-from utils.setting import ExperimentFilesHandler
+from utils.utils import get_reference_files
+from utils.configs import Config, MetersConst as MMeters
+from utils.manager import FilesHandler, ModelManager
 from metrics.evaluate_language import evaluate_language_files
 from metrics.evaluate_repetition import evaluate_repetition_files
 from metrics.evaluate_stats import evaluate_stats_files
 from metrics.metric import TRANSLATION_METRICS, TextMetricsConst, TextMetricsConstEvalCap
 from optim.optim import BertAdam, EMA
 from models.translator import Translator
-from models.model_manager_base import BaseModelManager
+
+from utils import configs
+from utils import utils_yaml
+from utils import utils
+from utils.utils import MetricComparisonConst
+from optim import lr_scheduler
+from metrics import metric
+from metrics.metric import DefaultMetricsConst as Metrics
 
 
-def cal_performance(pred, gold):
+def cal_performance(pred, gt):
     pred = pred.max(2)[1].contiguous().view(-1)
-    gold = gold.contiguous().view(-1)
-    valid_label_mask = gold.ne(BilaDataset.IGNORE)
-    pred_correct_mask = pred.eq(gold)
+    gt = gt.contiguous().view(-1)
+    valid_label_mask = gt.ne(BilaDataset.IGNORE)
+    pred_correct_mask = pred.eq(gt)
     n_correct = pred_correct_mask.masked_select(valid_label_mask).sum().item()
     return n_correct
 
@@ -47,68 +56,7 @@ def cal_performance(pred, gold):
 TRANSLATION_METRICS_LOG = ["Bleu_4", "METEOR", "ROUGE_L", "CIDEr", "re4"]
 
 
-class MartFilesHandler(ExperimentFilesHandler):
-    """
-    Overwrite default filehandler to add some more paths.
-    """
-
-    def __init__(
-        self,
-        run_name: str,
-        log_dir: str,
-        annotations_dir: str,
-    ):
-        super().__init__(
-            run_name=run_name,
-            log_dir=log_dir
-        )
-        self.annotations_dir = annotations_dir
-        self.path_caption = self.path_base / TrainerPathConst.DIR_CAPTION
-
-    def get_translation_files(self, epoch: Union[int, str], split: str) -> Path:
-        """
-        Summary:
-            生成文・gt文の保存先のpathを返す
-        Args:
-            epoch: Epoch.
-            split: dataset split (val, test)
-        """
-        return (
-            self.path_caption
-            / f"{TrainerPathConst.FILE_PREFIX_TRANSL_RAW}_{epoch}_{split}.json"
-        )
-
-    def setup_dirs(self, *, reset: bool = False) -> None:
-        """
-        Call super class to setup directories and additionally create the caption folder.
-
-        Args:
-            reset:
-
-        Returns:
-        """
-        super().setup_dirs(reset=reset)
-        os.makedirs(self.path_caption, exist_ok=True)
-
-
-class MartModelManager(BaseModelManager):
-    """
-    Wrapper for MART models.
-    """
-
-    def __init__(self, cfg: Config, model: nn.Module):
-        super().__init__(cfg)
-        # update config type hints
-        self.cfg: Config = self.cfg
-        self.model_dict: Dict[str, nn.Module] = {"model": model}
-
-
-class MartTrainerState(BaseTrainerState):
-    prev_best_score = 0.0
-    es_cnt = 0
-
-
-class MartTrainer(trainer_base.BaseTrainer):
+class Trainer:
     """
     Trainer for retrieval.
 
@@ -124,7 +72,6 @@ class MartTrainer(trainer_base.BaseTrainer):
         log_dir: Directory to put results.
         log_level: Log level. None will default to INFO = 20 if a new logger is created.
         logger: Logger. With the default None, it will be created by the trainer.
-        print_graph: Print graph and forward pass of the model.
         reset: Delete entire experiment and restart from scratch.
         load_best: Whether to load the best epoch (default loads last epoch to continue training).
         load_epoch: Whether to load a specific epoch.
@@ -139,59 +86,169 @@ class MartTrainer(trainer_base.BaseTrainer):
         model: nn.Module,
         run_name: str,
         train_loader_length: int,
-        *,
-        log_dir: str = "experiments",
+        log_dir: str = "results",
         log_level: Optional[int] = None,
         logger: Optional[logging.Logger] = None,
-        print_graph: bool = False,
         reset: bool = False,
         load_best: bool = False,
         load_epoch: Optional[int] = None,
         load_model: Optional[str] = None,
-        inference_only: bool = False,
-        annotations_dir: str = TrainerPathConst.DIR_ANNOTATIONS,
+        is_test: bool = False,
+        annotations_dir: str = "data",
     ):
+        assert "_" not in run_name, f"Run name {run_name} must not contain underscores."
+        
+        self.model = model
         # create a wrapper for the model
-        model_mgr = MartModelManager(cfg, model)
+        model_mgr = ModelManager(cfg, model)
 
         # overwrite default experiment files handler
-        exp = MartFilesHandler(
+        exp = FilesHandler(
             run_name=run_name,
             log_dir=log_dir,
             annotations_dir=annotations_dir
         )
         exp.setup_dirs(reset=reset)
 
-        super().__init__(
-            cfg,
-            model_mgr,
-            run_name,
-            train_loader_length,
-            log_dir=log_dir,
-            log_level=log_level,
-            logger=logger,
-            print_graph=print_graph,
-            reset=reset,
-            load_best=load_best,
-            load_epoch=load_epoch,
-            load_model=load_model,
-            is_test=inference_only,
-            exp_files_handler=exp,
-        )
-        self.model = model
+        # settings
+        self.is_test: bool = is_test
+        # save model manager
+        self.model_mgr: ModelManager = model_mgr
+        # create empty trainer state
+        self.state = configs.BaseTrainerState()
+        # save config
+        self.cfg: Config = cfg
+        # create experiment helper for directories, if it wasn't already overwritten by the base trainer
+        self.exp: FilesHandler = exp
 
-        # update type hints from base classes to inherited classes
-        self.cfg: Config = self.cfg
-        self.model_mgr: MartModelManager = self.model_mgr
-        self.exp: MartFilesHandler = self.exp
 
-        # # overwrite default state with inherited trainer state in case we need additional state fields
-        # self.state = RetrievalTrainerState()
+        # setup logging
+        assert logger is None or log_level is None, "Cannot specify both loglevel and logger together."
+        if logger is None:
+            if log_level is None:
+                self.log_level = utils.LogLevelsConst.INFO
+            else:
+                self.log_level = log_level
+            self.logger = utils.create_logger(utils.LOGGER_NAME, log_dir=self.exp.path_logs, log_level=self.log_level)
+        else:
+            self.logger = logger
+            self.log_level = self.logger.level
+        
+        # setup devices
+        if not self.cfg.use_cuda:
+            self.cfg.fp16_train = False
+        
+        # setup grad scaler if needed for fp16
+        self.grad_scaler: Optional[GradScaler] = None
+        if self.cfg.fp16_train:
+            self.grad_scaler: Optional[GradScaler] = GradScaler()
+        
+        # logs some infos
+        self.logger.info(f"Running on cuda: {self.cfg.use_cuda} "
+                            f"gpus found: {torch.cuda.device_count()}, fp16 amp: {self.cfg.fp16_train}.")
+        cudnn.enabled = self.cfg.cudnn_enabled
+        cudnn.benchmark = self.cfg.cudnn_benchmark
+        cudnn.deterministic = self.cfg.cudnn_deterministic
+        
+        # move models to device
+        for model in self.model_mgr.model_dict.values():
+            try:
+                if self.cfg.use_cuda:
+                    if not torch.cuda.is_available():
+                        raise RuntimeError(
+                            "CUDA requested but not available! Use --no_cuda to run on CPU.")
+                    model = model.cuda()
+            except RuntimeError as e:
+                raise RuntimeError(f"RuntimeError when putting model {type(model)} to cuda with DataParallel "
+                                    f"{model.__class__.__name__}") from e
+        
+        # create metrics writer
+        self.metrics = metric.MetricsWriter(self.exp)
 
-        # ---------- loss ----------
+        # print seed if it was set by the runner script
+        self.logger.info(f"Random seed: {self.cfg.random_seed}")
 
-        # loss is created directly in the mart model and not needed here
+        # dump yaml config to file
+        utils_yaml.dump_yaml_config_file(self.exp.path_base / 'config.yaml', self.cfg.config_orig)
+        
+        # setup automatic checkpoint loading. this will be parsed in self.hook_post_init()
+        ep_nums = self.exp.get_existing_checkpoints()
+        self.load = False
+        self.load_ep = -1
+        self.load_model = load_model
+        if self.load_model:
+            assert not load_epoch, (
+                "When given filepath with load_model, --load_epoch must not be set.")
+            self.load = True
+        # automatically find best epoch otherwise
+        elif len(ep_nums) > 0:
+            if load_epoch:
+                # load given epoch
+                assert not load_best, "Load_epoch and load_best cannot be set at the same time."
+                self.load_ep = load_epoch
+            elif load_best:
+                # load best epoch
+                self.logger.info("Load best checkpoint...")
+                best_ep = self.exp.find_best_epoch()
+                if best_ep == -1:
+                    # no validation done yet, load last
+                    self.load_ep = ep_nums[-1]
+                else:
+                    self.load_ep = best_ep
+                self.logger.info(f"Best ckpt to load: {self.load_ep}")
+                self.load = True
+            else:
+                # load last epoch
+                self.load_ep = ep_nums[-1]
+                self.logger.info(f"Last ckpt to load: {self.load_ep}")
+                self.load = True
+        else:
+            self.logger.info("No checkpoints found, starting from scratch.")
+        
+        # Per-epoch metrics where the average is not important.
+        self.metrics.add_meter(Metrics.TRAIN_EPOCH, use_avg=False)
+        self.metrics.add_meter(Metrics.TIME_TOTAL, use_avg=False)
+        self.metrics.add_meter(Metrics.TIME_VAL, use_avg=False)
+        self.metrics.add_meter(Metrics.VAL_LOSS, use_avg=False)
+        self.metrics.add_meter(Metrics.VAL_BEST_FIELD, use_avg=False)
 
+        # Per-step metrics
+        self.metrics.add_meter(Metrics.TRAIN_LR, per_step=True, use_avg=False)
+        self.metrics.add_meter(Metrics.TRAIN_GRAD_CLIP, per_step=True, reset_avg_each_epoch=True)
+        self.metrics.add_meter(Metrics.TRAIN_LOSS, per_step=True, reset_avg_each_epoch=True)
+
+        # Per-step Memory-RAM Profiling
+        self.metrics.add_meter(Metrics.PROFILE_GPU_MEM_USED, per_step=True)
+        self.metrics.add_meter(Metrics.PROFILE_GPU_LOAD, per_step=True)
+        self.metrics.add_meter(Metrics.PROFILE_RAM_USED, per_step=True)
+        self.metrics.add_meter(Metrics.PROFILE_GPU_MEM_TOTAL, per_step=True, use_avg=False)
+        self.metrics.add_meter(Metrics.PROFILE_RAM_TOTAL, per_step=True, use_avg=False)
+
+        # Step-based metrics for time, we only care about the total average
+        self.metrics.add_meter(Metrics.TIME_STEP_FORWARD, per_step=True, use_value=False)
+        self.metrics.add_meter(Metrics.TIME_STEP_BACKWARD, per_step=True, use_value=False)
+        self.metrics.add_meter(Metrics.TIME_STEP_TOTAL, per_step=True, use_value=False)
+        self.metrics.add_meter(Metrics.TIME_STEP_OTHER, per_step=True, use_value=False)
+
+        # compute steps per epoch
+        self.train_loader_length = train_loader_length
+
+        # The following fields must be set by the inheriting trainer. In special cases (like multiple optimizers
+        # with GANs), override methods get_opt_state and set_opt_state instead.
+        self.optimizer: Optimizer = None
+        self.lr_scheduler: lr_scheduler.LRScheduler = None
+
+        # setup timers and other stuff that does not need to be saved (temporary trainer state)
+        self.timer_step: float = 0
+        self.timer_step_forward: float = 0
+        self.timer_step_backward: float = 0
+        self.timer_train_start: float = 0
+        self.timer_train_epoch: float = 0
+        self.timer_val_epoch: float = 0
+        self.timedelta_step_forward: float = 0
+        self.timedelta_step_backward: float = 0
+        self.steps_per_epoch: int = 0
+        
         # ---------- additional metrics ----------
         # train loss and accuracy
         self.metrics.add_meter(MMeters.TRAIN_LOSS_PER_WORD, use_avg=False)
@@ -292,7 +349,6 @@ class MartTrainer(trainer_base.BaseTrainer):
         # time book-keeping etc.
         self.hook_pre_train(show_log)
         
-        self.steps_per_epoch = len(train_loader)
         for _epoch in tqdm(range(self.state.current_epoch, self.cfg.train.num_epochs)):
             # set models to train, time book-keeping
             self.hook_pre_train_epoch(show_log)
@@ -324,7 +380,7 @@ class MartTrainer(trainer_base.BaseTrainer):
 
                 self.optimizer.zero_grad()
                 with autocast(enabled=self.cfg.fp16_train):
-                    # 各入力をcudaに載せる
+                    # input to cuda
                     batched_data = [
                         prepare_batch_inputs(
                             step_data,
@@ -334,7 +390,6 @@ class MartTrainer(trainer_base.BaseTrainer):
                         for step_data in batch[0]
                     ]
 
-                    # 各データを分割して保持
                     input_ids_list = [e["input_ids"] for e in batched_data]
                     video_features_list = [e["video_feature"] for e in batched_data]
                     input_masks_list = [e["input_mask"] for e in batched_data]
@@ -395,6 +450,7 @@ class MartTrainer(trainer_base.BaseTrainer):
                             self.model.parameters(), self.cfg.train.clip_gradient
                         )
                     self.optimizer.step()
+                
                 # update model parameters with ema
                 if self.ema is not None:
                     self.ema(self.model, self.state.total_step)
@@ -403,9 +459,9 @@ class MartTrainer(trainer_base.BaseTrainer):
                 total_loss += loss.item()
                 n_correct = 0
                 n_word = 0
-                for pred, gold in zip(pred_scores_list, input_labels_list):
-                    n_correct += cal_performance(pred, gold)
-                    valid_label_mask = gold.ne(BilaDataset.IGNORE)
+                for pred, gt in zip(pred_scores_list, input_labels_list):
+                    n_correct += cal_performance(pred, gt)
+                    valid_label_mask = gt.ne(BilaDataset.IGNORE)
                     n_word += valid_label_mask.sum().item()
                 n_word_total += n_word
                 n_word_correct += n_correct
@@ -434,6 +490,7 @@ class MartTrainer(trainer_base.BaseTrainer):
             accuracy = 1.0 * n_word_correct / n_word_total
             self.metrics.update_meter(MMeters.TRAIN_LOSS_PER_WORD, loss_per_word)
             self.metrics.update_meter(MMeters.TRAIN_ACC, accuracy)
+            
             # return loss_per_word, accuracy
             batch_loss /= num_steps
             batch_snt_loss /= num_steps
@@ -534,73 +591,67 @@ class MartTrainer(trainer_base.BaseTrainer):
             self.hook_pre_step_timer()  # hook for step timing
 
             with autocast(enabled=self.cfg.fp16_val):
-                if self.cfg.recurrent:
-                    # recurrent MART, TransformerXL, ...
-                    # get data
-                    batched_data = [
-                        prepare_batch_inputs(
-                            step_data,
-                            use_cuda=self.cfg.use_cuda,
-                            non_blocking=self.cfg.cuda_non_blocking,
+                batched_data = [
+                    prepare_batch_inputs(
+                        step_data,
+                        use_cuda=self.cfg.use_cuda,
+                        non_blocking=self.cfg.cuda_non_blocking,
+                    )
+                    for step_data in batch[0]
+                ]
+                # validate (ground truth as input for next token)
+                input_ids_list = [e["input_ids"] for e in batched_data]
+                video_features_list = [e["video_feature"] for e in batched_data]
+                input_masks_list = [e["input_mask"] for e in batched_data]
+                token_type_ids_list = [e["token_type_ids"] for e in batched_data]
+                input_labels_list = [e["input_labels"] for e in batched_data]
+                gt_rec = [e["gt_rec"] for e in batched_data]
+
+                loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
+                    input_ids_list,
+                    video_features_list,
+                    input_masks_list,
+                    token_type_ids_list,
+                    input_labels_list,
+                    gt_rec,
+                )
+                batch_loss += loss
+                batch_snt_loss += snt_loss
+                batch_rec_loss += rec_loss
+                batch_clip_loss += clip_loss
+                batch_idx += 1
+                # translate (no ground truth text)
+                step_sizes = batch[1]  # list(int), len == bsz
+                meta = batch[2]  # list(dict), len == bsz
+
+                model_inputs = [
+                    [e["input_ids"] for e in batched_data],
+                    [e["video_feature"] for e in batched_data],
+                    [e["input_mask"] for e in batched_data],
+                    [e["token_type_ids"] for e in batched_data],
+                ]
+                dec_seq_list = self.translator.translate_batch(
+                    model_inputs,
+                    use_beam=self.cfg.use_beam,
+                )
+
+                for example_idx, (step_size, cur_meta) in enumerate(
+                    zip(step_sizes, meta)
+                ):
+                    # example_idx indicates which example is in the batch
+                    for step_idx, step_batch in enumerate(dec_seq_list[:step_size]):
+                        # step_idx or we can also call it sen_idx
+                        batch_res["results"][cur_meta["clip_id"]].append(
+                            {
+                                "sentence": dataset.convert_ids_to_sentence(
+                                    step_batch[example_idx].cpu().tolist()
+                                ),
+                                # remove encoding
+                                # .encode("ascii", "ignore"),
+                                "gt_sentence": cur_meta["gt_sentence"],
+                                "clip_id": cur_meta["clip_id"]
+                            }
                         )
-                        for step_data in batch[0]
-                    ]
-                    # validate (ground truth as input for next token)
-                    input_ids_list = [e["input_ids"] for e in batched_data]
-                    video_features_list = [e["video_feature"] for e in batched_data]
-                    input_masks_list = [e["input_mask"] for e in batched_data]
-                    token_type_ids_list = [e["token_type_ids"] for e in batched_data]
-                    input_labels_list = [e["input_labels"] for e in batched_data]
-                    gt_rec = [e["gt_rec"] for e in batched_data]
-
-                    loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
-                        input_ids_list,
-                        video_features_list,
-                        input_masks_list,
-                        token_type_ids_list,
-                        input_labels_list,
-                        gt_rec,
-                    )
-                    batch_loss += loss
-                    batch_snt_loss += snt_loss
-                    batch_rec_loss += rec_loss
-                    batch_clip_loss += clip_loss
-                    batch_idx += 1
-                    # translate (no ground truth text)
-                    step_sizes = batch[1]  # list(int), len == bsz
-                    meta = batch[2]  # list(dict), len == bsz
-
-                    model_inputs = [
-                        [e["input_ids"] for e in batched_data],
-                        [e["video_feature"] for e in batched_data],
-                        [e["input_mask"] for e in batched_data],
-                        [e["token_type_ids"] for e in batched_data],
-                    ]
-                    dec_seq_list = self.translator.translate_batch(
-                        model_inputs,
-                        use_beam=self.cfg.use_beam,
-                        recurrent=True,
-                        untied=False,
-                        xl=self.cfg.xl,
-                    )
-
-                    for example_idx, (step_size, cur_meta) in enumerate(
-                        zip(step_sizes, meta)
-                    ):
-                        # example_idx indicates which example is in the batch
-                        for step_idx, step_batch in enumerate(dec_seq_list[:step_size]):
-                            # step_idx or we can also call it sen_idx
-                            batch_res["results"][cur_meta["clip_id"]].append(
-                                {
-                                    "sentence": dataset.convert_ids_to_sentence(
-                                        step_batch[example_idx].cpu().tolist()
-                                    ),
-                                    # remove encoding
-                                    # .encode("ascii", "ignore"),
-                                    "gt_sentence": cur_meta["gt_sentence"],
-                                    "clip_id": cur_meta["clip_id"]
-                                }
-                            )
 
                 # keep logs
                 n_correct = 0
@@ -825,71 +876,65 @@ class MartTrainer(trainer_base.BaseTrainer):
             self.hook_pre_step_timer()  # hook for step timing
 
             with autocast(enabled=self.cfg.fp16_val):
-                if self.cfg.recurrent:
-                    # recurrent MART, TransformerXL, ...
-                    # get data
-                    batched_data = [
-                        prepare_batch_inputs(
-                            step_data,
-                            use_cuda=self.cfg.use_cuda,
-                            non_blocking=self.cfg.cuda_non_blocking,
+                batched_data = [
+                    prepare_batch_inputs(
+                        step_data,
+                        use_cuda=self.cfg.use_cuda,
+                        non_blocking=self.cfg.cuda_non_blocking,
+                    )
+                    for step_data in batch[0]
+                ]
+                # validate (ground truth as input for next token)
+                input_ids_list = [e["input_ids"] for e in batched_data]
+                video_features_list = [e["video_feature"] for e in batched_data]
+                input_masks_list = [e["input_mask"] for e in batched_data]
+                token_type_ids_list = [e["token_type_ids"] for e in batched_data]
+                input_labels_list = [e["input_labels"] for e in batched_data]
+                gt_rec = [e["gt_rec"] for e in batched_data]
+
+                loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
+                    input_ids_list,
+                    video_features_list,
+                    input_masks_list,
+                    token_type_ids_list,
+                    input_labels_list,
+                    gt_rec
+                )
+                batch_loss += loss
+                batch_snt_loss += snt_loss
+                batch_rec_loss += rec_loss
+                batch_clip_loss += clip_loss
+                batch_idx += 1
+                # translate (no ground truth text)
+                step_sizes = batch[1]  # list(int), len == bsz
+                meta = batch[2]  # list(dict), len == bsz
+
+                model_inputs = [
+                    [e["input_ids"] for e in batched_data],
+                    [e["video_feature"] for e in batched_data],
+                    [e["input_mask"] for e in batched_data],
+                    [e["token_type_ids"] for e in batched_data],
+                ]
+                dec_seq_list = self.translator.translate_batch(
+                    model_inputs,
+                    use_beam=self.cfg.use_beam,
+                )
+
+                for example_idx, (step_size, cur_meta) in enumerate(
+                    zip(step_sizes, meta)
+                ):
+                    # example_idx indicates which example is in the batch
+                    for step_idx, step_batch in enumerate(dec_seq_list[:step_size]):
+                        # step_idx or we can also call it sen_idx
+                        batch_res["results"][cur_meta["clip_id"]].append(
+                            {
+                                "sentence": dataset.convert_ids_to_sentence(
+                                    step_batch[example_idx].cpu().tolist()
+                                ),
+                                "gt_sentence": cur_meta["gt_sentence"],
+                                "clip_id": cur_meta["clip_id"]
+                            }
                         )
-                        for step_data in batch[0]
-                    ]
-                    # validate (ground truth as input for next token)
-                    input_ids_list = [e["input_ids"] for e in batched_data]
-                    video_features_list = [e["video_feature"] for e in batched_data]
-                    input_masks_list = [e["input_mask"] for e in batched_data]
-                    token_type_ids_list = [e["token_type_ids"] for e in batched_data]
-                    input_labels_list = [e["input_labels"] for e in batched_data]
-                    gt_rec = [e["gt_rec"] for e in batched_data]
-
-                    loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
-                        input_ids_list,
-                        video_features_list,
-                        input_masks_list,
-                        token_type_ids_list,
-                        input_labels_list,
-                        gt_rec
-                    )
-                    batch_loss += loss
-                    batch_snt_loss += snt_loss
-                    batch_rec_loss += rec_loss
-                    batch_clip_loss += clip_loss
-                    batch_idx += 1
-                    # translate (no ground truth text)
-                    step_sizes = batch[1]  # list(int), len == bsz
-                    meta = batch[2]  # list(dict), len == bsz
-
-                    model_inputs = [
-                        [e["input_ids"] for e in batched_data],
-                        [e["video_feature"] for e in batched_data],
-                        [e["input_mask"] for e in batched_data],
-                        [e["token_type_ids"] for e in batched_data],
-                    ]
-                    dec_seq_list = self.translator.translate_batch(
-                        model_inputs,
-                        use_beam=self.cfg.use_beam,
-                        recurrent=True,
-                        untied=False,
-                        xl=self.cfg.xl,
-                    )
-
-                    for example_idx, (step_size, cur_meta) in enumerate(
-                        zip(step_sizes, meta)
-                    ):
-                        # example_idx indicates which example is in the batch
-                        for step_idx, step_batch in enumerate(dec_seq_list[:step_size]):
-                            # step_idx or we can also call it sen_idx
-                            batch_res["results"][cur_meta["clip_id"]].append(
-                                {
-                                    "sentence": dataset.convert_ids_to_sentence(
-                                        step_batch[example_idx].cpu().tolist()
-                                    ),
-                                    "gt_sentence": cur_meta["gt_sentence"],
-                                    "clip_id": cur_meta["clip_id"]
-                                }
-                            )
 
                 # keep logs
                 n_correct = 0
@@ -1031,3 +1076,435 @@ class MartTrainer(trainer_base.BaseTrainer):
             self.exp.get_translation_files(epoch, split="val"),
             self.exp.get_models_file_ema(epoch),
         ]
+
+    def check_is_val_epoch(self) -> bool:
+        """
+        Check if validation is needed at the end of training epochs.
+
+        Returns:
+            Whether or not validation is needed.
+        """
+        # check if we need to validate
+        do_val = (self.state.current_epoch % self.cfg.val.val_freq == 0 and self.cfg.val.val_freq > -1
+                  and self.state.current_epoch >= self.cfg.val.val_start)
+        # always validate the last epoch
+        do_val = do_val or self.state.current_epoch == self.cfg.train.num_epochs
+        return do_val
+
+    def check_is_new_best(self, result: float) -> bool:
+        """
+        Check if the given result improves over the old best.
+
+        Args:
+            result: Validation result to compare with old best.
+
+        Returns:
+            Whether or not the result improves over the old best.
+        """
+        old_best = self.state.det_best_field_best
+
+        # check if this is a new best
+        is_best = self._check_if_current_score_is_best(result, old_best)
+
+        # log info
+        old_best_str = f"{old_best:.5f}" if old_best is not None else "NONE"
+        self.logger.info(f"***** Improvement: {is_best} *****. Before: {old_best_str}, "
+                         f"After {result:.5f}, Field: {self.cfg.val.det_best_field}, "
+                         f"Mode {self.cfg.val.det_best_threshold_mode}")
+
+        # update fields
+        self.state.det_best_field_current = result
+        if is_best:
+            self.state.det_best_field_best = result
+
+        return is_best
+
+    def close(self) -> None:
+        """
+        Close logger and metric writers.
+        """
+        utils.remove_handlers_from_logger(self.logger)
+        self.metrics.close()
+
+    # ---------- Public hooks that run once per experiment ----------
+
+    def hook_post_init(self) -> None:
+        """
+        Hook called after trainer init is done. Loads the correct epoch.
+        """
+        if self.load:
+            assert not self.model_mgr.was_loaded, (
+                f"Error: Loading epoch {self.load_ep} but already weights have been loaded. If you load weights for "
+                f"warmstarting, you cannot run if the experiments has already saved checkpoints. Change the run name "
+                f"or use --reset to delete the experiment run.")
+            if self.load_model:
+                # load model from file. this would start training from epoch 0, but is usually only used for validation.
+                self.logger.info(f"Loading model from checkpoint file {self.load_model}")
+                model_state = torch.load(str(self.load_model))
+                self.model_mgr.set_model_state(model_state)
+            else:
+                # load model given an epoch. also reload metrics and optimization to correctly continue training.
+                self.logger.info(f"Loading Ep {self.load_ep}.")
+                self._load_checkpoint(self.load_ep)
+                if not self.is_test:
+                    # In training, add 1 to current epoch after loading since if we loaded epoch N, we are training
+                    # epoch N+1 now. In validation, we are validating on epoch N.
+                    self.state.current_epoch += 1
+
+    def hook_pre_train(self, show_log:bool=False) -> None:
+        """
+        Hook called on training start. Remember start epoch, time the start, log info.
+        """
+        self.state.start_epoch = self.state.current_epoch
+        self.timer_train_start = timer()
+        if show_log:
+            self.logger.info(f"Training from {self.state.current_epoch} to {self.cfg.train.num_epochs}")
+            self.logger.info("Training Models on devices " + ", ".join([
+                f"{key}: {next(val.parameters()).device}" for key, val in self.model_mgr.model_dict.items()]))
+
+    def hook_post_train(self, show_log:bool=False) -> None:
+        """
+        Hook called on training finish. Log info on total num epochs trained and duration.
+        """
+        if show_log:
+            self.logger.info(f"In total, training {self.state.current_epoch} epochs took "
+                            f"{self.state.time_total:.3f}s ({self.state.time_total - self.state.time_val:.3f}s "
+                            f"train / {self.state.time_val:.3f}s val)")
+
+    # ---------- Public hooks that run every epoch ----------
+
+    def hook_pre_train_epoch(self, show_log:bool=False) -> None:
+        """
+        Hook called before training an epoch. Set models to train, times start, reset meters, log info.
+        """
+        self.model_mgr.set_all_models_train()
+        self.timer_train_epoch = timer()
+        self.timer_step = timer()
+        # clear metrics
+        self.metrics.hook_epoch_start()
+        if show_log:
+            self.logger.info(f"{str(datetime.datetime.now()).split('.')[0]} ---------- "
+                            f"Training epoch: {self.state.current_epoch}")
+
+    def hook_pre_val_epoch(self) -> None:
+        """
+        Hook called before validating an epoch. Set models to val, times start.
+        """
+        # set models to validation mode
+        self.model_mgr.set_all_models_eval()
+        # start validation epoch timer
+        self.timer_val_epoch = timer()
+        #
+        self.timer_step = timer()
+
+    def hook_post_val_epoch(self, val_loss: float, is_best: bool) -> None:
+        """
+        Hook called after validation epoch is done. Updates basic validation meters.
+
+        Args:
+            val_loss: Validation loss.
+            is_best: Whether this is a new best epoch.
+        """
+        # update validation timer
+        self.state.time_val += timer() - self.timer_val_epoch
+
+        # update loss and result
+        self.metrics.update_meter(Metrics.VAL_LOSS, val_loss)
+        self.metrics.update_meter(Metrics.VAL_BEST_FIELD, self.state.det_best_field_current)
+
+        # update info dict for reloading
+        self.state.infos_val_epochs.append(self.state.current_epoch)
+        self.state.infos_val_steps.append(self.state.total_step)
+        self.state.infos_val_is_good.append(is_best)
+
+    def hook_post_train_and_val_epoch(self, is_val: bool, has_improved: bool) -> None:
+        """
+        Hook called after entire epoch (training + validation) is done.
+
+        Args:
+            is_val: Whether there was validation done this epoch.
+            has_improved: If there was validation, whether there was an improvement (new best).
+        """
+        # update total timer
+        self.state.time_total += timer() - self.timer_train_epoch
+
+        # step LR scheduler after end of epoch
+        if self.lr_scheduler is not None:
+            self.lr_scheduler.step_epoch(is_val, has_improved)
+
+        # log metrics
+        self.metrics.update_meter(Metrics.TIME_TOTAL, self.state.time_total)
+        self.metrics.update_meter(Metrics.TIME_VAL, self.state.time_val)
+        self.metrics.update_meter(Metrics.TRAIN_EPOCH, self.state.current_epoch)
+
+        # display step times
+        fields = [Metrics.TIME_STEP_FORWARD, Metrics.TIME_STEP_BACKWARD, Metrics.TIME_STEP_OTHER]
+        time_total = self.metrics.meters[Metrics.TIME_STEP_TOTAL].avg
+        time_str_list = ["Step time: Total", f"{time_total * 1000:.0f}ms"]
+        for field in fields:
+            time_value = self.metrics.meters[field].avg
+            time_name_short = str(field).split("/")[-1].split("_")[-1]
+            time_str_list += [time_name_short, f"{time_value * 1000:.2f}ms", f"{time_value / time_total:.1%}"]
+        self.logger.info(" ".join(time_str_list))
+
+        # feed step-based metrics to tensorboard and collector
+        self.metrics.feed_metrics(False, self.state.total_step, self.state.current_epoch)
+
+        # save checkpoint and metrics
+        self._save_checkpoint()
+
+        # cleanup files depending on saving config (default just keep best and last epoch, discard all others)
+        self._cleanup_files()
+
+        # increase epoch counter
+        self.state.current_epoch += 1
+
+    # ---------- Public hooks that run every step ----------
+
+    def hook_pre_step_timer(self) -> None:
+        """
+        Hook called before forward pass. Sets timer.
+        """
+        self.timer_step_forward = timer()
+
+    def hook_post_forward_step_timer(self) -> None:
+        """
+        Hook called after forward pass, before backward pass. Compute time delta and sets timer.
+        """
+        self.timer_step_backward = timer()
+        self.timedelta_step_forward = self.timer_step_backward - self.timer_step_forward
+
+    def hook_post_backward_step_timer(self) -> None:
+        """
+        Hook called after backward pass. Compute time delta.
+        """
+        self.timedelta_step_backward = timer() - self.timer_step_backward
+
+    def hook_post_step(
+            self, epoch_step: int, loss: torch.Tensor, lr: float, additional_log: Optional[str] = None,
+            disable_grad_clip: bool = False, show_log: bool=False) -> bool:
+        """
+        Hook called after one optimization step.
+
+        Profile gpu and update step-based meters. Feed everything to tensorboard.
+        Needs some information to be passed down from the trainer for proper logging.
+
+        Args:
+            epoch_step: Current step in the epoch.
+            loss: Training loss.
+            lr: Training learning rate.
+            additional_log: Additional string to print in the train step log.
+            disable_grad_clip: Disable gradient clipping if it's done already somewhere else
+
+        Returns:
+            Whether log output should be printed in this step or not.
+        """
+        # compute total time for this step and restart the timer
+        total_step_time = timer() - self.timer_step
+        self.timer_step = timer()
+
+        # clip gradients
+        total_norm = 0
+        if self.cfg.train.clip_gradient > -1 and not disable_grad_clip:
+            # get all parameters to clip
+            _params, _param_names, params_flat = self.model_mgr.get_all_params()
+            # clip using pytorch
+            total_norm = clip_grad_norm_(params_flat, self.cfg.train.clip_gradient)
+            if total_norm > self.cfg.train.clip_gradient:
+                # print log message if gradients where clipped
+                grad_clip_coef = self.cfg.train.clip_gradient / (total_norm + 1e-6)
+                self.logger.info(f"Clipping gradient: {total_norm} with coef {grad_clip_coef}")
+            total_norm = total_norm.item()
+        self.state.last_grad_norm = total_norm
+
+        # print infos
+        if epoch_step % self.cfg.logging.step_train == 0:
+            total_train_time = (timer() - self.timer_train_epoch) / 60
+            str_step = ("{:" + str(len(str(self.steps_per_epoch))) + "d}").format(epoch_step)
+            print_string = "".join([
+                f"E{self.state.current_epoch}[{str_step}/{self.steps_per_epoch}] T {total_train_time:.3f}m ",
+                f"LR {lr:.1e} L {loss:.4f} ",
+                f"Grad {self.state.last_grad_norm:.3e} " if self.state.last_grad_norm != 0 else "",
+                f"{additional_log}" if additional_log is not None else ""])
+            if show_log:
+                self.logger.info(print_string)
+
+        # check GPU / RAM profiling
+        if ((self.state.epoch_step % self.cfg.logging.step_gpu == 0 and self.cfg.logging.step_gpu > 0) or
+                self.state.epoch_step == self.cfg.logging.step_gpu_once and self.cfg.logging.step_gpu_once > 0):
+            # get the current profile values
+            (gpu_names, total_memory_per, used_memory_per, load_per, ram_total, ram_used, ram_avail
+             ) = utils.profile_gpu_and_ram()
+            # average / sum over all GPUs
+            gpu_mem_used: float = sum(used_memory_per)
+            gpu_mem_total: float = sum(total_memory_per)
+            # gpu_mem_percent: float = gpu_mem_used / gpu_mem_total
+            load_avg: float = sum(load_per) / max(1, len(load_per))
+
+            self.metrics.update_meter(Metrics.PROFILE_GPU_MEM_USED, gpu_mem_used)
+            self.metrics.update_meter(Metrics.PROFILE_GPU_MEM_TOTAL, gpu_mem_total)
+            self.metrics.update_meter(Metrics.PROFILE_GPU_LOAD, load_avg)
+            self.metrics.update_meter(Metrics.PROFILE_RAM_USED, ram_used)
+            self.metrics.update_meter(Metrics.PROFILE_RAM_TOTAL, ram_total)
+            # # these 2 are not logged as they are redundant with the others.
+            # self.metrics.update_meter(Metrics.PROFILE_GPU_MEM_PERCENT, gpu_mem_percent)
+            # self.metrics.update_meter(Metrics.PROFILE_RAM_AVAILABLE, ram_avail)
+
+            # log the values
+            gpu_names_str = " ".join(set(gpu_names))
+            multi_load, multi_mem = "", ""
+            if len(load_per) > 1:
+                multi_load = " [" + ", ".join(f"{load:.0%}" for load in load_per) + "]"
+                multi_mem = " [" + ", ".join(f"{mem:.1f}GB" for mem in used_memory_per) + "]"
+            if show_log:
+                self.logger.info(f"RAM GB used/avail/total: {ram_used:.1f}/{ram_avail:.1f}/{ram_total:.1f} - "
+                                f"GPU {gpu_names_str} Load: {load_avg:.1%}{multi_load} "
+                                f"Mem: {gpu_mem_used:.1f}GB/{gpu_mem_total:.1f}GB{multi_mem}")
+
+        # update timings
+        other_t = total_step_time - self.timedelta_step_forward - self.timedelta_step_backward
+        self.metrics.update_meter(Metrics.TIME_STEP_FORWARD, self.timedelta_step_forward)
+        self.metrics.update_meter(Metrics.TIME_STEP_BACKWARD, self.timedelta_step_backward)
+        self.metrics.update_meter(Metrics.TIME_STEP_TOTAL, total_step_time)
+        self.metrics.update_meter(Metrics.TIME_STEP_OTHER, other_t)
+        # update clipped gradient
+        self.metrics.update_meter(Metrics.TRAIN_GRAD_CLIP, self.state.last_grad_norm)
+        # update LR
+        self.metrics.update_meter(Metrics.TRAIN_LR, lr)
+        if self.state.epoch_step % self.cfg.logging.step_train == 0 and self.cfg.logging.step_train > 0:
+            # loss update necessary
+            self.metrics.update_meter(Metrics.TRAIN_LOSS, loss.item())
+
+        # Save epoch step and increase total step counter
+        self.state.epoch_step = epoch_step
+        self.state.total_step += 1
+
+        # feed step-based metrics to tensorboard and collector
+        self.metrics.feed_metrics(True, self.state.total_step, self.state.current_epoch)
+
+        # End of batch, step lr scheduler depending on flag
+        if self.lr_scheduler is not None:
+            self.lr_scheduler.step()
+
+    # ---------- Non-public methods ----------
+
+    def _check_if_current_score_is_best(self, current: float, best: float) -> bool:
+        """
+        Compare given current and best and return True if the current is better than best + some threshold.
+        Depending on config, smaller or bigger values are better and threshold is absolute or relative.
+
+        Args:
+            current: Current score.
+            best: Best score so far.
+
+        Returns:
+            Whether current is better than best by some threshold.
+        """
+        cp_mode = self.cfg.val.det_best_compare_mode
+        th_mode = self.cfg.val.det_best_threshold_mode
+
+        if best is None:
+            # no best exists, so current is automatically better
+            return True
+        if cp_mode == MetricComparisonConst.VAL_DET_BEST_MODE_MIN:
+            # smaller values are better
+            if th_mode == MetricComparisonConst.VAL_DET_BEST_TH_MODE_REL:
+                # must be relatively better by epsilon
+                rel_epsilon = 1 - self.cfg.val.det_best_threshold_value
+                return current < best * rel_epsilon
+            if th_mode == MetricComparisonConst.VAL_DET_BEST_TH_MODE_ABS:
+                # must be absolutely better by epsilon
+                return current < best - self.cfg.val.det_best_threshold_value
+            raise ValueError(f"Threshold mode for metric comparison not understood: {th_mode}")
+        if cp_mode == MetricComparisonConst.VAL_DET_BEST_MODE_MAX:
+            # bigger values are better
+            if th_mode == MetricComparisonConst.VAL_DET_BEST_TH_MODE_REL:
+                # must be relatively better by epsilon
+                rel_epsilon = 1 + self.cfg.val.det_best_threshold_value
+                return current > best * rel_epsilon
+            if th_mode == MetricComparisonConst.VAL_DET_BEST_TH_MODE_ABS:
+                # must be absolutely better by epsilon
+                return current > best + self.cfg.val.det_best_threshold_value
+            raise ValueError(f"Threshold mode for metric comparison not understood: {th_mode}")
+        raise ValueError(f"Compare mode for determining best field not understood: {cp_mode}")
+
+    def _save_checkpoint(self) -> None:
+        """
+        Save current epoch.
+        """
+        # trainer state
+        trainerstate_file = self.exp.get_trainerstate_file(self.state.current_epoch)
+        self.state.save(trainerstate_file)
+
+        # metrics state
+        self.metrics.save_epoch(self.state.current_epoch)
+
+        # models
+        models_file = self.exp.get_models_file(self.state.current_epoch)
+        state = self.model_mgr.get_model_state()
+        torch.save(state, str(models_file))
+
+        # optimizer and scheduler
+        opt_file = self.exp.get_optimizer_file(self.state.current_epoch)
+        opt_state = self.get_opt_state()
+        torch.save(opt_state, str(opt_file))
+
+    def _load_checkpoint(self, epoch) -> None:
+        """
+        Load given epoch.
+        """
+        # trainer state
+        trainerstate_file = self.exp.get_trainerstate_file(epoch)
+        self.state.load(trainerstate_file)
+
+        # metrics state
+        self.metrics.load_epoch(epoch)
+
+        # models
+        models_file = self.exp.get_models_file(epoch)
+        model_state = torch.load(str(models_file))
+        self.model_mgr.set_model_state(model_state)
+
+        # optimizer and scheduler
+        if not self.is_test:
+            opt_file = self.exp.get_optimizer_file(self.state.current_epoch)
+            opt_state = torch.load(str(opt_file))
+            self.set_opt_state(opt_state)
+        else:
+            self.logger.info("Don't load optimizer and scheduler during inference.")
+
+    def _cleanup_files(self) -> None:
+        """
+        Delete epoch and info files to save space, depending on configuration.
+        """
+        ep_nums = self.exp.get_existing_checkpoints()
+        if len(ep_nums) == 0:
+            # no checkpoints exist
+            return
+        # always save best and last
+        best_ep = self.exp.find_best_epoch()
+        last_ep = ep_nums[-1]
+        # remember which epochs have been cleaned up
+        cleaned = []
+        for ep_num in ep_nums:
+            # always keep the best episode
+            if ep_num == best_ep:
+                continue
+            # always keep the last episode
+            if ep_num == last_ep:
+                continue
+            # if the save checkpoint frequency is set, some intermediate checkpoints should be kept
+            if self.cfg.saving.keep_freq > 0:
+                if ep_num % self.cfg.saving.keep_freq == 0:
+                    continue
+            # delete safely (don't crash if they don't exist for some reason)
+            for file in [self.exp.get_models_file(ep_num), self.exp.get_optimizer_file(ep_num),
+                         self.exp.get_trainerstate_file(ep_num), self.exp.get_metrics_epoch_file(ep_num),
+                         self.exp.get_metrics_step_file(ep_num)] + self.get_files_for_cleanup(ep_num):
+                if file.is_file():
+                    os.remove(file)
+                else:
+                    self.logger.warning(f"Tried to delete {file} but couldn't find it.")
+            cleaned.append(ep_num)
+        if len(cleaned) > 0:
+            self.logger.debug(f"Deleted epochs: {cleaned}")

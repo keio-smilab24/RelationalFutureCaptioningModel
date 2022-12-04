@@ -3,14 +3,13 @@ import shutil
 import datetime
 import numpy as np
 
-from trainer import MartTrainer
+from trainer import Trainer
 from models.model import create_model
 from datasets.bila import create_datasets_and_loaders
 from utils.utils_yaml import load_yaml_to_config
 from utils.utils import fix_seed
 from utils.arguments import set_parser
-from utils.setting import get_config_file
-from utils.configs import Config, update_config_from_args
+from utils.configs import Config, get_config_file, update_config_from_args
 
 
 def main():
@@ -51,12 +50,12 @@ def main():
             print(model)
 
         # always load best epoch during validation
-        load_best = args.load_best or args.validate
+        load_best = args.load_best or args.validate # False
 
-        trainer = MartTrainer(
+        trainer = Trainer(
             cfg, model, run_name, len(train_loader), log_dir=args.log_dir,
-            log_level=args.log_level, logger=None, print_graph=args.print_graph, reset=args.reset, load_best=load_best,
-            load_epoch=args.load_epoch, load_model=args.load_model, inference_only=args.validate,
+            log_level=args.log_level, logger=None, reset=args.reset, load_best=load_best,
+            load_epoch=args.load_epoch, load_model=args.load_model, is_test=args.validate,
             annotations_dir=args.data_dir)
 
         if args.validate:

@@ -55,7 +55,7 @@ class RecursiveTransformer(nn.Module):
         self.actionloss_func = nn.CrossEntropyLoss()
         
         # clipの特徴量の次元
-        input_size = 768
+        input_size = cfg.clip_dim
         # TODO : memo cnnを使ったadjustがbetterな気がする
         self.size_adjust = nn.Linear(150528, 768)
         self.upsampling = nn.Linear(768, 1024)
@@ -236,7 +236,7 @@ def create_model(
     """
     Args:
         cfg: config
-        vocab_size: Vocabulary calc in len(train_set.word2idx).
+        vocab_size: len(train_set.word2idx).
         verbose: Print model name and number of parameters.
     """
     cfg.max_position_embeddings = cfg.max_v_len + cfg.max_t_len

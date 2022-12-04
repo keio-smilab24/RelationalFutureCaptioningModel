@@ -60,10 +60,6 @@ class MultiModalEmbedding(nn.Module):
             nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps),
         )
         self.img_embeddings = nn.Sequential(
-            # nn.LayerNorm(cfg.video_feature_size, eps=cfg.layer_norm_eps),
-            # # nn.Dropout(cfg.hidden_dropout_prob),
-            # nn.Linear(cfg.video_feature_size, cfg.hidden_size),
-            # nn.ReLU(True),
             nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps),
         )
 

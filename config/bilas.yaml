@@ -1,5 +1,4 @@
 description: ""
-config_type: "mart"
 # ---------- Technical ----------
 random_seed: null
 use_cuda: true
@@ -7,7 +6,6 @@ debug: false
 cudnn_enabled: true
 cudnn_benchmark: true
 cudnn_deterministic: false
-use_multi_gpu: false
 cuda_non_blocking: true
 fp16_train: false # this will create NaN in the backward pass!
 fp16_val: false
@@ -29,7 +27,7 @@ val:
     det_best_threshold_value: 1e-4
     det_best_terminate_after: 10
 save_mode: "best"
-# beam search
+# ----- beam search -----
 use_beam: False
 beam_size: 2
 n_best: 1
@@ -53,21 +51,14 @@ dataset_val:
     split: "val"
 max_n_sen: 12 # 6 activitynet, 12 youcook2
 max_n_sen_add_val: 10
-# ここを変更: 元は22
 max_t_len: 55
-max_v_len: 8 # 3 for mart with coot, 100 for rgb+flow video features
+max_v_len: 8 # img_num + 2
 type_vocab_size: 2
 word_vec_size: 173
-# COOT embeddings. Set coot_model_name to null to train on video features
-coot_model_name: "yc2_100m_coot"
-coot_dim_clip: 150528
-coot_dim_vid: 768
-coot_mode: "clip"
-# Video feature size: 3072 for rgb+flow features, 1152 for COOT vidclip, 384 for COOT clip
-video_feature_size: 768
 # ---------- Model ----------
 attention_probs_dropout_prob: 0.1
 hidden_dropout_prob: 0.1
+clip_dim: 768
 hidden_size: 768
 intermediate_size: 768
 layer_norm_eps: 1e-12
@@ -76,11 +67,6 @@ num_attention_heads: 12
 num_hidden_layers: 2
 n_memory_cells: 1
 share_wd_cls_weight: false
-recurrent: true # recurrent model
-untied: false # untied model
-mtrans: false # vanilla transformer
-xl: false # transformer xl
-xl_grad: false # transformer xl with gradient
 # ---------- Optimization ----------
 ema_decay: 0.9999
 initializer_range: 0.02

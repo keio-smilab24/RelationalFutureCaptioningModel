@@ -18,7 +18,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 from utils import baseconfig
 from utils.baseconfig import ConstantHolder
-from utils.setting import ExperimentFilesHandler
 from utils.utils import LOGGER_NAME
 
 
@@ -186,7 +185,7 @@ class MetricsWriter:
         tensorb_writer: SummaryWriter for adding scalars to tensorboard.
     """
 
-    def __init__(self, exp: ExperimentFilesHandler) -> None:
+    def __init__(self, exp) -> None:
         self.exp = exp
 
         # meters for collecting individual values during training
