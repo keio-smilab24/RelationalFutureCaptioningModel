@@ -33,6 +33,9 @@ class CNN(nn.Module):
         Args:
             x (torch.Tensor) : (B, 3*224*224)
         """
+        B, L, D = x.size()
+        x = x.view(-1, 3, 224, 224)
+
         x = self.cnn1(x)
         x = self.bn1(x)
         x = self.relu1(x)
@@ -45,6 +48,8 @@ class CNN(nn.Module):
 
         x = self.flatten(x)
         x = self.linear(x)
+
+        x = x.view(B, L, -1)
 
         return x
 
