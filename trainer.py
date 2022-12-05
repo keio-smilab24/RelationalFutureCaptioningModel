@@ -34,10 +34,10 @@ from metrics.metric import TRANSLATION_METRICS, TextMetricsConst, TextMetricsCon
 from optim.optim import BertAdam, EMA
 from models.translator import Translator
 
-from utils import configs
-from utils import utils_yaml
+from utils.utils import INFO
+from utils.configs import TrainerState
 from utils import utils
-from utils.utils import MetricComparisonConst
+from utils.utils import MetricComparisonConst, dump_yaml_config_file
 from optim import lr_scheduler
 from metrics import metric
 from metrics.metric import DefaultMetricsConst as Metrics
@@ -76,8 +76,8 @@ class Trainer:
         load_best: Whether to load the best epoch (default loads last epoch to continue training).
         load_epoch: Whether to load a specific epoch.
         load_model: Load model given by file path.
-        inference_only: Removes some parts that are not needed during inference for speedup.
-        annotations_dir: Folder with ground truth captions.
+        is_test: Removes some parts that are not needed during inference for speedup.
+        data_dir: Folder with ground truth captions.
     """
 
     def __init__(
@@ -94,39 +94,39 @@ class Trainer:
         load_epoch: Optional[int] = None,
         load_model: Optional[str] = None,
         is_test: bool = False,
-        annotations_dir: str = "data",
+        data_dir: str = "data",
+        show_log: bool = False,
     ):
         assert "_" not in run_name, f"Run name {run_name} must not contain underscores."
         
         self.model = model
-        # create a wrapper for the model
-        model_mgr = ModelManager(cfg, model)
 
-        # overwrite default experiment files handler
+        # ファイル関連の設定
         exp = FilesHandler(
             run_name=run_name,
             log_dir=log_dir,
-            annotations_dir=annotations_dir
+            data_dir=data_dir
         )
+        # フォルダの作成
         exp.setup_dirs(reset=reset)
 
         # settings
         self.is_test: bool = is_test
         # save model manager
-        self.model_mgr: ModelManager = model_mgr
+        self.model_mgr: ModelManager = ModelManager(cfg, model)
         # create empty trainer state
-        self.state = configs.BaseTrainerState()
+        self.state = TrainerState()
         # save config
         self.cfg: Config = cfg
-        # create experiment helper for directories, if it wasn't already overwritten by the base trainer
+        # create experiment helper for directories
         self.exp: FilesHandler = exp
 
 
-        # setup logging
+        # loggingの設定
         assert logger is None or log_level is None, "Cannot specify both loglevel and logger together."
         if logger is None:
             if log_level is None:
-                self.log_level = utils.LogLevelsConst.INFO
+                self.log_level = INFO
             else:
                 self.log_level = log_level
             self.logger = utils.create_logger(utils.LOGGER_NAME, log_dir=self.exp.path_logs, log_level=self.log_level)
@@ -135,6 +135,7 @@ class Trainer:
             self.log_level = self.logger.level
         
         # setup devices
+        cudnn.enabled = self.cfg.cudnn_enabled
         if not self.cfg.use_cuda:
             self.cfg.fp16_train = False
         
@@ -144,13 +145,11 @@ class Trainer:
             self.grad_scaler: Optional[GradScaler] = GradScaler()
         
         # logs some infos
-        self.logger.info(f"Running on cuda: {self.cfg.use_cuda} "
-                            f"gpus found: {torch.cuda.device_count()}, fp16 amp: {self.cfg.fp16_train}.")
-        cudnn.enabled = self.cfg.cudnn_enabled
-        cudnn.benchmark = self.cfg.cudnn_benchmark
-        cudnn.deterministic = self.cfg.cudnn_deterministic
+        if show_log:
+            self.logger.info(f"Running on cuda: {self.cfg.use_cuda} "
+                                f"gpus found: {torch.cuda.device_count()}, fp16 amp: {self.cfg.fp16_train}.")
         
-        # move models to device
+        # move models to cuda
         for model in self.model_mgr.model_dict.values():
             try:
                 if self.cfg.use_cuda:
@@ -165,21 +164,23 @@ class Trainer:
         # create metrics writer
         self.metrics = metric.MetricsWriter(self.exp)
 
-        # print seed if it was set by the runner script
+        # seedの表示
         self.logger.info(f"Random seed: {self.cfg.random_seed}")
 
-        # dump yaml config to file
-        utils_yaml.dump_yaml_config_file(self.exp.path_base / 'config.yaml', self.cfg.config_orig)
+        # 使用したconfig fileを保存
+        dump_yaml_config_file(self.exp.path_base / 'config.yaml', self.cfg.config_orig)
         
         # setup automatic checkpoint loading. this will be parsed in self.hook_post_init()
         ep_nums = self.exp.get_existing_checkpoints()
         self.load = False
         self.load_ep = -1
         self.load_model = load_model
+        
         if self.load_model:
             assert not load_epoch, (
                 "When given filepath with load_model, --load_epoch must not be set.")
             self.load = True
+        
         # automatically find best epoch otherwise
         elif len(ep_nums) > 0:
             if load_epoch:
@@ -331,7 +332,6 @@ class Trainer:
         self.val_steps = 0
         self.test_steps = 0
         self.beforeloss = 0.0
-        self.wandb_flag = 0
 
     def train_model(
         self,
@@ -342,8 +342,10 @@ class Trainer:
         use_wandb: bool = False,
         show_log: bool = False,
     ) -> None:
+        
+        self.use_wandb = use_wandb
         if use_wandb:
-            wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}_change_decoder_laptop"
+            wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}_linear_to_cnn"
             wandb.init(name=wandb_name, project="BilaS")
         
         # time book-keeping etc.
@@ -419,6 +421,7 @@ class Trainer:
                         input_labels_list,
                         gt_rec,
                     )
+
                     self.train_steps += 1
                     num_steps += 1
                     batch_loss += loss
@@ -459,6 +462,7 @@ class Trainer:
                 total_loss += loss.item()
                 n_correct = 0
                 n_word = 0
+                
                 for pred, gt in zip(pred_scores_list, input_labels_list):
                     n_correct += cal_performance(pred, gt)
                     valid_label_mask = gt.ne(BilaDataset.IGNORE)
@@ -496,7 +500,8 @@ class Trainer:
             batch_snt_loss /= num_steps
             batch_rec_loss /= num_steps
             batch_clip_loss /= num_steps
-            if self.wandb_flag == 1:
+            
+            if self.use_wandb:
                 wandb.log({"train_loss": batch_loss})
                 wandb.log({"train_snt_loss": batch_snt_loss})
                 wandb.log({"train_rec_loss": batch_rec_loss})
@@ -682,7 +687,7 @@ class Trainer:
         batch_rec_loss /= batch_idx
         batch_clip_loss /= batch_idx
         loss_delta = self.beforeloss - batch_loss
-        if self.wandb_flag == 1:
+        if self.use_wandb:
             wandb.log({"val_loss_diff": loss_delta})
             wandb.log({"val_loss": batch_loss})
             wandb.log({"val_snt_loss": batch_snt_loss})
@@ -705,7 +710,7 @@ class Trainer:
 
         # get reference files (ground truth captions)
         reference_files_map = get_reference_files(
-            self.cfg.dataset_val.name, self.exp.annotations_dir, datatype=datatype,
+            self.cfg.dataset_val.name, self.exp.data_dir, datatype=datatype,
         )
         reference_files = reference_files_map[eval_mode]
         reference_file_single = reference_files[0]
@@ -767,7 +772,7 @@ class Trainer:
         )
 
         # find field which determines whether this is a new best epoch
-        if self.wandb_flag == 1:
+        if self.use_wandb:
             wandb.log({"val_BLEU4": flat_metrics["Bleu_4"], "val_METEOR": flat_metrics["METEOR"], "val_ROUGE_L": flat_metrics["ROUGE_L"], "val_CIDEr": flat_metrics["CIDEr"]})
         if self.cfg.val.det_best_field == "cider":
             # val_score = flat_metrics["CIDEr"]
@@ -963,7 +968,7 @@ class Trainer:
         batch_snt_loss /= batch_idx
         batch_rec_loss /= batch_idx
         batch_clip_loss /= batch_idx
-        if self.wandb_flag == 1:
+        if self.use_wandb:
             wandb.log({"test_loss": batch_loss})
             wandb.log({"test_snt_loss": batch_snt_loss})
             wandb.log({"test_rec_loss": batch_rec_loss})
@@ -986,7 +991,7 @@ class Trainer:
         
         # get reference files (ground truth captions)
         reference_files_map = get_reference_files(
-            self.cfg.dataset_val.name, self.exp.annotations_dir, test=True, datatype=datatype,
+            self.cfg.dataset_val.name, self.exp.data_dir, test=True, datatype=datatype,
         )
         reference_files = reference_files_map[eval_mode]
         reference_file_single = reference_files[0]
@@ -1030,8 +1035,9 @@ class Trainer:
         self.logger.info(
             f"Done with translation, epoch {self.state.current_epoch} split {eval_mode}"
         )
-        if self.wandb_flag == 1:
+        if self.use_wandb:
             wandb.log({"test_BLEU4": flat_metrics["Bleu_4"], "test_METEOR": flat_metrics["METEOR"], "test_ROUGE_L": flat_metrics["ROUGE_L"], "test_CIDEr": flat_metrics["CIDEr"]})
+        
         self.test_metrics = TRANSLATION_METRICS_LOG
         self.higest_test = flat_metrics
         self.logger.info(
@@ -1334,7 +1340,7 @@ class Trainer:
                 self.state.epoch_step == self.cfg.logging.step_gpu_once and self.cfg.logging.step_gpu_once > 0):
             # get the current profile values
             (gpu_names, total_memory_per, used_memory_per, load_per, ram_total, ram_used, ram_avail
-             ) = utils.profile_gpu_and_ram()
+            ) = utils.profile_gpu_and_ram()
             # average / sum over all GPUs
             gpu_mem_used: float = sum(used_memory_per)
             gpu_mem_total: float = sum(total_memory_per)

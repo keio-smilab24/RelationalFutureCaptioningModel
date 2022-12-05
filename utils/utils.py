@@ -1,15 +1,15 @@
-import argparse
+import ctypes
 import datetime
 import logging
 import random
+import yaml
 import os
 import sys
+from pprint import pprint
 from pathlib import Path
 from copy import deepcopy
-from json import JSONEncoder
-from typing import Any, Dict, List, Optional, Union, Tuple
-import ctypes
-import multiprocessing
+from typing import Any, Dict, List, Optional, Union, Tuple, Mapping
+from collections import Mapping as CollectionsMapping
 
 import numpy as np
 import torch
@@ -17,13 +17,13 @@ import GPUtil
 import psutil
 
 from utils import baseconfig
-from utils.baseconfig import ConstantHolder
 
 DEFAULT = "default"
 REF = "ref"
 NONE = "none"
 LOGGER_NAME = "trainlog"
 LOGGING_FORMATTER = logging.Formatter("%(levelname)5s %(message)s", datefmt="%m%d %H%M%S")
+INFO = 20
 
 # ---------- Multiprocessing ----------
 
@@ -34,19 +34,8 @@ MAP_TYPES: Dict[str, Any] = {
     'double': ctypes.c_double
 }
 
-class LogLevelsConst(ConstantHolder):
-    """
-    Loglevels, same as logging module.
-    """
-    CRITICAL = 50
-    ERROR = 40
-    WARNING = 30
-    INFO = 20
-    DEBUG = 10
-    NOTSET = 0
 
-
-def create_logger_without_file(name: str, log_level: int = LogLevelsConst.INFO, no_parent: bool = False,
+def create_logger_without_file(name: str, log_level: int = INFO, no_parent: bool = False,
                                 no_print: bool = False) -> logging.Logger:
     """
     Create a stdout only logger.
@@ -63,7 +52,7 @@ def create_logger_without_file(name: str, log_level: int = LogLevelsConst.INFO, 
 
 
 def create_logger(
-        name: str, *, filename: str = "run", log_dir: Union[str, Path] = "", log_level: int = LogLevelsConst.INFO,
+        name: str, *, filename: str = "run", log_dir: Union[str, Path] = "", log_level: int = INFO,
         no_parent: bool = False, no_print: bool = False) -> logging.Logger:
     """
     Create a new logger.
@@ -125,103 +114,22 @@ def remove_handlers_from_logger(logger: logging.Logger) -> None:
         handler.close()
 
 
-def print_logger_info(logger: logging.Logger) -> None:
-    """
-    Print infos describing the logger: The name and handlers.
-
-    Args:
-        logger: Logger.
-    """
-    print(logger.name)
-    x = list(logger.handlers)
-    for i in x:
-        handler_str = f"Handler {i.name} Type {type(i)}"
-        print(handler_str)
-
-
-# ---------- Argparser ----------
-
-
-class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter,
-                        argparse.RawDescriptionHelpFormatter,
-                        argparse.MetavarTypeHelpFormatter):
-    """
-    Custom formatter
-    - raw descriptions (no removing newlines)
-    - show default values
-    - show metavars (str, int, ...) instead of names
-    - fit to console width
-    """
-
-    def __init__(self, prog: Any):
-        try:
-            term_size = os.get_terminal_size().columns
-            max_help_pos = term_size // 2
-        except OSError:
-            term_size = None
-            max_help_pos = 24
-        super().__init__(
-            prog, max_help_position=max_help_pos, width=term_size)
-
-
-class ArgParser(argparse.ArgumentParser):
-    """
-    ArgumentParser with Custom Formatter and some convenience functions.
-
-    For best results, write a docstring at the top of the file and call it
-    with ArgParser(description=__doc__)
-
-    Args:
-        description: Help text for Argparser. Set description=__doc__ and write help text into module header.
-    """
-
-    def __init__(self, description: str = "none"):
-        super().__init__(description=description, formatter_class=CustomFormatter)
-
-
 # ---------- Time utilities ----------
 
 def get_timestamp_for_filename(dtime: Optional[datetime.datetime] = None):
     """
     Convert datetime to timestamp for filenames.
+    例: 2022-12-05 10:56:38.378030 -> 022_12_05_10_56_38
 
     Args:
         dtime: Optional datetime object, will use now() if not given.
-
-    Returns:
     """
     if dtime is None:
         dtime = datetime.datetime.now()
+    print(dtime)
     ts = str(dtime).split(".")[0].replace(" ", "_")
     ts = ts.replace(":", "_").replace("-", "_")
     return ts
-
-
-# ---------- Files ----------
-def parse_file_to_list(file: Union[Path, str]) -> List[str]:
-    """
-    Given a text file, read contents to list of lines. Strip lines, ignore empty and comment lines
-
-    Args:
-        file: Input file.
-
-    Returns:
-        List of lines.
-    """
-    # loop lines
-    output = []
-    for line in Path(file).read_text(encoding="utf8").splitlines(keepends=False):
-        # strip line
-        line = line.strip()
-        if line == "":
-            # skip empty line
-            continue
-        if line[0] == "#":
-            # skip comment line
-            continue
-        # collect
-        output.append(line)
-    return output
 
 
 # ---------- Config / dict ----------
@@ -315,36 +223,8 @@ def check_config_dict(name: str, config: Dict[str, Any], strict: bool = True) ->
                 raise ValueError(err_msg)
             logging.getLogger(LOGGER_NAME).warning(err_msg)
 
-class BetterJSONEncoder(JSONEncoder):
-    """
-    Enable the JSON encoder to handle Path objects.
 
-    It would be nice to also handle numpy arrays, tensors etc. but that is not required currently.
-    """
-
-    def default(self, o: Any) -> Any:
-        if isinstance(o, Path):
-            return str(o)
-        return super().default(o)
-
-
-# ---------- Constants ----------
-
-class ConfigNamesConst(baseconfig.ConstantHolder):
-    """
-    Stores configuration group names.
-    """
-    TRAIN = "train"
-    VAL = "val"
-    DATASET_TRAIN = "dataset_train"
-    DATASET_VAL = "dataset_val"
-    LOGGING = "logging"
-    SAVING = "saving"
-    OPTIMIZER = "optimizer"
-    LR_SCHEDULER = "lr_scheduler"
-
-
-class TrainerPathConst():
+class TrainerPathConst:
     """
     Stores directory and file names for training.
     """
@@ -444,30 +324,6 @@ def get_reference_files(
     raise ValueError(f"Dataset unknown {dset_name}")
 
 
-def create_shared_array(arr: np.ndarray, dtype: str = "float") -> np.array:
-    """
-    Converts an existing numpy array into a shared numpy array, such that
-    this array can be used by multiple CPUs. Used e.g. for preloading the
-    entire feature dataset into memory and then making it available to multiple
-    dataloaders.
-
-    Args:
-        arr (np.ndarray): Array to be converted to shared array
-        dtype (np.dtype): Datatype of shared array
-
-    Returns:
-        shared_array (multiprocessing.Array): shared array
-    """
-    shape = arr.shape
-    flat_shape = int(np.prod(np.array(shape)))
-    c_type = MAP_TYPES[dtype]
-    shared_array_base = multiprocessing.Array(c_type, flat_shape)
-    shared_array = np.ctypeslib.as_array(shared_array_base.get_obj())
-    shared_array = shared_array.reshape(shape)
-    shared_array[:] = arr[:]
-    return shared_array
-
-
 def get_truncnorm_tensor(shape: Tuple[int], *, mean: float = 0, std: float = 1, limit: float = 2) -> torch.Tensor:
     """
     Create and return normally distributed tensor, except values with too much deviation are discarded.
@@ -487,22 +343,6 @@ def get_truncnorm_tensor(shape: Tuple[int], *, mean: float = 0, std: float = 1, 
     valid = (tmp < limit) & (tmp > -limit)
     _, ind = valid.max(-1, keepdim=True)
     return tmp.gather(-1, ind).squeeze(-1).mul_(std).add_(mean)
-
-
-def fill_tensor_with_truncnorm(input_tensor: torch.Tensor, *, mean: float = 0, std: float = 1, limit: float = 2) -> None:
-    """
-    Fill given input tensor with a truncated normal dist.
-
-    Args:
-        input_tensor: tensor to be filled
-        mean: normal mean
-        std: normal std
-        limit: which values to discard
-    """
-    # get truncnorm values
-    tmp = get_truncnorm_tensor(input_tensor.shape, mean=mean, std=std, limit=limit)
-    # fill input tensor
-    input_tensor[...] = tmp[...]
 
 
 # ---------- Profiling ----------
@@ -630,3 +470,138 @@ def count_parameters(model, verbose=True):
     if verbose:
         print(f"Parameters total: {n_all}, frozen: {n_frozen}")
     return n_all, n_frozen
+
+
+## utils for yaml
+
+def load_yaml_to_config(yaml_file: Union[str, Path]) -> Dict[str, Any]:
+    """
+    Load given yaml file. Supports loading scientific floats like 1e-8 as python floats. Preserves key order.
+
+    Args:
+        yaml_file: File to load
+
+    Returns:
+        Loaded config as nested dict.
+    """
+    yaml_str = Path(yaml_file).read_text(encoding="utf8")
+    return convert_yaml_to_dict(yaml_str)
+
+
+def convert_yaml_to_dict(yaml_str: str) -> Dict[str, Any]:
+    """
+    Load given yaml string. Supports loading scientific floats like 1e-8 as python floats. Preserves key order.
+
+    Args:
+        yaml_str: String to load
+
+    Returns:
+        Loaded config as nested dict.
+    """
+    # convert yaml to ordered dict
+    config: Dict[str, Any] = yaml.load(yaml_str, Loader=yaml.SafeLoader)
+
+    # support loading scientific float values
+    def post_process(d: Mapping[str, Any]) -> Dict[str, Any]:
+        """
+        Recursively parse a dict and try to convert all strings to floats, fail silently.
+
+        Args:
+            d: Input dict.
+
+        Returns:
+            Dict where strings like "1e-2" have been converted to the corresponding float 0.01
+        """
+        new_od = {}
+        for key, val in d.items():
+            if isinstance(val, str):
+                # try to convert strings to float and ignore errors
+                try:
+                    val = float(val)
+                except ValueError:
+                    pass
+            elif isinstance(val, CollectionsMapping):
+                # call this function recursively
+                val = post_process(val)
+            else:
+                pass
+            # write converted values to the return dict
+            new_od[key] = val
+        return new_od
+
+    config = post_process(config)
+    return config
+
+
+def convert_dict_to_yaml(input_dict: Dict[str, Any], indent_spaces: int = 4, indent_level: int = 0) -> str:
+    """
+    The original yaml.dump needed improvements, this is a recursive re-implementation
+
+    yaml.dump(config_dict)
+
+    Args:
+        input_dict: Dict to be converted to yaml.
+        indent_spaces: How many spaces per indent level.
+        indent_level: Current indent level for the recursion.
+
+    Returns:
+        YAML string.
+    """
+    # setup key-value collector and indent level
+    ret_list = []
+    indent = " " * (indent_level * indent_spaces)
+    # loop input dict
+    for key, value in input_dict.items():
+        # setup collector for single key-value pair
+        single_ret_list = [f"{indent}{key}:"]
+        # check type
+        if isinstance(value, bool):
+            # bools as lower-case
+            value_str = str(value).lower()
+        elif isinstance(value, (int, float)):
+            # leave float conversion to python
+            value_str = str(value)
+        elif isinstance(value, str):
+            # put quotes around strings
+            value_str = f"\"{value}\""
+        elif value is None:
+            # None is null in yaml
+            value_str = "null"
+        elif isinstance(value, dict):
+            # iterate dictionaries recursively
+            value_str = "\n" + convert_dict_to_yaml(value, indent_spaces=indent_spaces, indent_level=indent_level + 1)
+        else:
+            raise ValueError(f"dict to yaml, value type not understood: {value}")
+        # concatenate the single key-value pair and add it to the key-value collector
+        single_ret_list += [f" {value_str}"]
+        ret_list += ["".join(single_ret_list)]
+    # join the collected key-value pairs with newline
+    return "\n".join(ret_list)
+
+
+def dump_yaml_config_file(filename: str, config_dict: Dict[str, Any]) -> None:
+    """
+    Store dictionary as YAML file. Changes indent to 4, formats strings with quotes.
+
+    Args:
+        filename: Target filename.
+        config_dict: Input dictionary.
+    """
+
+    # convert dict to yaml string
+    s = convert_dict_to_yaml(config_dict)
+
+    # write to file
+    Path(filename).open("wt", encoding="utf8").write(s)
+
+    # make sure that if it's converted back via yaml, it's still the same dict
+    test_config_dict = load_yaml_to_config(filename)
+    if config_dict != test_config_dict:
+        # verbose error printing
+        print("---------- Original config:")
+        pprint(config_dict)
+        print()
+        print("---------- Reloaded config:")
+        pprint(test_config_dict)
+        print()
+        raise ValueError("Config has changed during yaml saving, this is an implementation error!")

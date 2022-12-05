@@ -10,6 +10,7 @@ from utils.configs import Config
 from models.embedder import ImgEmbedder, MultiModalEmbedding
 from models.encoder import RSAEncoder, TransformerEncoder
 from models.decoder import TransformerDecoder, PredictionHead
+from models.cnn import CNN
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,8 @@ class RecursiveTransformer(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.cfg.vocab_size = vocab_size
-        
+
+        self.size_adjust = CNN(num_channels=3)
         self.img_embedder = ImgEmbedder()
         self.embeddings = MultiModalEmbedding(cfg, add_postion_embeddings=True)
         self.TSModule = RSAEncoder(cfg)
@@ -51,29 +53,8 @@ class RecursiveTransformer(nn.Module):
             )
         else:
             self.loss_func = nn.CrossEntropyLoss(ignore_index=-1)
-        self.contloss_func = nn.CrossEntropyLoss(ignore_index=-1)
-        self.actionloss_func = nn.CrossEntropyLoss()
         
-        # clipの特徴量の次元
-        input_size = cfg.clip_dim
-        # TODO : memo cnnを使ったadjustがbetterな気がする
-        self.size_adjust = nn.Linear(150528, 768)
-        self.upsampling = nn.Linear(768, 1024)
-        self.pred_f = nn.Sequential(
-            nn.LayerNorm(input_size),
-            nn.Linear(input_size, input_size * 2),
-            nn.ReLU(),
-            nn.Linear(input_size * 2, input_size),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(input_size, input_size),
-        )
-        self.ff = nn.Sequential(
-            nn.Linear(input_size, input_size),
-            nn.ReLU(),
-            nn.Linear(input_size, input_size),
-            nn.Dropout(0.2),
-        )
+        self.actionloss_func = nn.CrossEntropyLoss()
 
         self.rec_loss = nn.MSELoss()
         self.apply(self.init_bert_weights)
@@ -113,8 +94,8 @@ class RecursiveTransformer(nn.Module):
         """
         # 画像特徴だけ抽出
         img_feats = features[:, 1:self.cfg.max_v_len-1, :].clone()  # (B, 7, 150528)
-        features = self.size_adjust(features)                       # (B, 31, 150528) -> (B, 31, 768)
-        
+        features = self.size_adjust(features) # (B, 31, 150528) -> (B, 31, 768)
+
         self.pred_reconst = []
         self.gt_rec = []
         

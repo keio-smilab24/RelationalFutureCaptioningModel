@@ -165,7 +165,7 @@ class TypedNamedTuple(BaseModel):
 
     def __init__(self, *args, **kwargs):
         assert len(args) <= len(self.__fields__), (f"Too many ({len(args)}) arguments "
-                                                   f"for class {self.__class__.__name__}")
+                                                    f"for class {self.__class__.__name__}")
         if len(args) > 0:
             # fill the kwargs dict with (name, value) entries from args
             for (field, _model_field), arg in zip(self.__fields__.items(), args):

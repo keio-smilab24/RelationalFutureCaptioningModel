@@ -52,6 +52,7 @@ class Args:
     # (1) attention pathの作成で使用
     pon_att_num: int = config(long='--attNum', short="-a", default=2000)
     save_att_path: bool = False
+    do_att_path: bool = False
 
     # (2) extrace_sheet2csvで使用
     verNum: int = config(long='--ver', short='-v', default=1, choices=[1,2])
@@ -59,29 +60,35 @@ class Args:
     delete_two_text: bool = config(long='--delete', short='-del', default=False)
     csv_output_prefix: str = config(long="--csvPrefix", short="-c", default="sentences_")
     save_csv_set: bool = False
+    do_csv_set: bool = True
 
     # (3) make_jsonlで使用
     att_type: str = config(long='--att_type', short='-t', default='att', choices=['gray', 'att', 'over', 'ave'])
     save_all_json: bool = False
     save_all_csv: bool = False
     name_jsonl: str = config(long="--jname", short='-jn', default="bilas_all.jsonl")
+    do_all_json: bool = True
 
     # (4) exec_mecabで使用
     name_after_mecab: str = config(long="--mjname", short='-mjn', default="bilas_all_mecab.jsonl")
     save_mecab_json: bool = False
+    do_mecab_json: bool = True
 
     # (5) create_split_jsonlで使用
     seed: int = 0
     add_mode: bool = False
     add_mode_file: str = config(long='--addname', short='-adname', default="bilas_all_split.jsonl")
     save_split_json: bool = False
+    do_split_json: bool = True
     
     # (6) make_captionで使用
     save_caption_json: bool = False
+    do_caption_json: bool = True
     
     # (7) calc_topk_lengthで使用
     calc_max_t_len: bool = False
-    top_k: int = config(long='--topk', short='-t', default=10)
+    top_k: int = config(long='--topk', short='-tk', default=10)
+    do_calc_t_len: bool = True
 
 def delete_two_sentence(text):
     """
@@ -447,25 +454,32 @@ def main():
     args: Args = Args.from_args()
 
     # (1) Ponnetフォルダ内のattention画像へのpath(csv)を作成する
-    create_pon_att_path(args)
+    if args.do_att_path:
+        create_pon_att_path(args)
 
     # (2) sheetからdownloadしたcsvから必要な情報を抽出する
-    extract_sheet2csv(args)
+    if args.do_csv_set:
+        extract_sheet2csv(args)
     
     # (3) csvからjsonlファイルを作成する
-    make_jsonl(args)
+    if args.do_all_json:
+        make_jsonl(args)
 
     # (4) sentenceにmecabを適用
-    exex_mecab(args)
+    if args.do_mecab_json:
+        exex_mecab(args)
     
     # (5) jsonlからtrain/val/testに分けたjsonlをそれぞれ作成
-    create_split_jsonl(args)
+    if args.do_split_json:
+        create_split_jsonl(args)
     
     # (6) 評価caption用のjsonファイルの作成
-    make_caption(args)
+    if args.do_caption_json:
+        make_caption(args)
     
     # (7) 上位top-kのmax_t_lenを計算する
-    calc_topk_length(args)
+    if args.do_calc_t_len:
+        calc_topk_length(args)
 
 
 if __name__ == "__main__":

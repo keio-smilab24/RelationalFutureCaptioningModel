@@ -10,7 +10,7 @@ import torch
 from torch import nn
 
 from utils.utils import TrainerPathConst
-from utils.configs import Config, BaseTrainerState
+from utils.configs import Config, TrainerState
 
 class ModelManager:
     """
@@ -160,10 +160,10 @@ class FilesHandler:
         self,
         run_name: str,
         log_dir: str,
-        annotations_dir: str,
+        data_dir: str,
     ):
         self.run_name: str = run_name
-        self.annotations_dir = annotations_dir
+        self.data_dir = data_dir
     
         self.path_base: Path = Path(log_dir, "{}".format(self.run_name))
         self.path_caption = self.path_base / TrainerPathConst.DIR_CAPTION
@@ -187,10 +187,11 @@ class FilesHandler:
             / f"{TrainerPathConst.FILE_PREFIX_TRANSL_RAW}_{epoch}_{split}.json"
         )
 
-    def setup_dirs(self, *, reset: bool = False) -> None:
+    def setup_dirs(self, reset: bool = False) -> None:
         """
-        Call super class to setup directories and additionally create the caption folder.
-        Make sure all directories exist, delete them if a reset is requested.
+        Summary:
+            各種保存用のフォルダを作成
+            resetの場合は存在するフォルダを削除後、新たに作成する
 
         Args:
             reset: Delete this experiment
@@ -217,7 +218,7 @@ class FilesHandler:
 
         # extract epoch numbers from those filenames
         ep_nums = sorted([int(a.split(f"{TrainerPathConst.FILE_PREFIX_TRAINERSTATE}_")[-1].split(".json")[0])
-                          for a in list_of_files])
+                            for a in list_of_files])
         return ep_nums
 
     def find_best_epoch(self):
@@ -233,7 +234,7 @@ class FilesHandler:
             return -1
 
         # read trainerstate of the last epoch (contains all info needed to find the best epoch)
-        temp_state = BaseTrainerState.create_from_file(self.get_trainerstate_file(ep_nums[-1]))
+        temp_state = TrainerState.create_from_file(self.get_trainerstate_file(ep_nums[-1]))
         if len(temp_state.infos_val_epochs) == 0:
             # no validation has been done, assume last epoch is best
             return ep_nums[-1]
@@ -245,37 +246,7 @@ class FilesHandler:
         best_epoch = temp_state.infos_val_epochs[best_idx]
         return best_epoch
 
-    def find_last_epoch(self):
-        """
-        Find last episode out of existing checkpoint data.
-
-        Returns:
-            Last epoch or -1 if no epochs are found.
-        """
-        ep_nums = self.get_existing_checkpoints()
-        if len(ep_nums) == 0:
-            # no checkpoints found
-            return -1
-        # return last epoch
-        return ep_nums[-1]
-
-    def get_existing_metrics(self) -> List[int]:
-        """
-        Get list checkpoint numbers by epoch metrics.
-
-        Returns:
-            List of checkpoint numbers.
-        """
-        # get list of existing trainerstate filenames
-        list_of_files = glob.glob(str(self.get_metrics_epoch_file("*")))
-
-        # extract epoch numbers from those filenames
-        ep_nums = sorted([int(a.split(f"{TrainerPathConst.FILE_PREFIX_METRICS_EPOCH}_")[-1].split(".json")[0])
-                          for a in list_of_files])
-        return ep_nums
-
     # ---------- File definitions. ----------
-
     # Parameter epoch allows str to create glob filenames with "*".
 
     def get_models_file(self, epoch: Union[int, str]) -> Path:
@@ -313,18 +284,6 @@ class FilesHandler:
             Path
         """
         return self.path_models / f"{TrainerPathConst.FILE_PREFIX_OPTIMIZER}_{epoch}.pth"
-
-    def get_data_file(self, epoch: Union[int, str]) -> Path:
-        """
-        Get file path for storing the optimizer.
-
-        Args:
-            epoch: Epoch.
-
-        Returns:
-            Path
-        """
-        return self.path_models / f"{TrainerPathConst.FILE_PREFIX_DATA}_{epoch}.pth"
 
     def get_trainerstate_file(self, epoch: Union[int, str]) -> Path:
         """

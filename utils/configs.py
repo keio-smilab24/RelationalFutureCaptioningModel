@@ -7,9 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 
-from optim import lr_scheduler, optimization
 from utils.baseconfig import ConfigClass, ConstantHolder
-from utils.utils import ConfigNamesConst
 from utils import baseconfig, utils
 from utils import utils
 
@@ -98,12 +96,12 @@ class Config(ConfigClass):
         utils.resolve_sameas_config_recursively(config)
 
         # mandatory groups, needed for nntrainer to work correctly
-        self.train = BaseTrainConfig(config.pop("train"))
-        self.val = BaseValConfig(config.pop("val"))
+        self.train = TrainConfig(config.pop("train"))
+        self.val = ValConfig(config.pop("val"))
         self.dataset_train = DatasetConfig(config.pop("dataset_train"))
         self.dataset_val = DatasetConfig(config.pop("dataset_val"))
-        self.logging = BaseLoggingConfig(config.pop("logging"))
-        self.saving = BaseSavingConfig(config.pop("saving"))
+        self.logging = LoggingConfig(config.pop("logging"))
+        self.saving = SavingConfig(config.pop("saving"))
         
         # more training
         self.label_smoothing: float = config.pop("label_smoothing")
@@ -298,91 +296,7 @@ def update_config_from_args(config: Dict, args: argparse.Namespace, *, verbose: 
 
     return config
 
-
-class BaseTrainerState(baseconfig.SaveableBaseModel):
-    """
-    Current trainer state that must be saved for training continuation..
-    """
-    # total time bookkeeping
-    time_total: float = 0
-    time_val: float = 0
-    # state info TO SAVE
-    start_epoch: int = 0
-    current_epoch: int = 0
-    epoch_step: int = 0
-    total_step: int = 0
-    det_best_field_current: float = 0
-    det_best_field_best: Optional[float] = None
-
-    # state info lists
-    infos_val_epochs: List[int] = []
-    infos_val_steps: List[int] = []
-    infos_val_is_good: List[int] = []
-
-    # logging
-    last_grad_norm: int = 0
-
-
-class BaseExperimentConfig(ConfigClass):
-    """
-    Base configuration class, loads the dict from yaml config files for an experiment.
-
-    This is where the entire config dict will be loaded into first.
-
-    Args:
-        config: Configuration dictionary to be loaded.
-
-    Attributes:
-        ...
-    """
-
-    def __init__(self, config: Dict, strict: bool = True) -> None:
-        self.config_orig = deepcopy(config)  # backup original input dict
-        self.config = config  # bind dict to class
-        self.strict = strict
-        utils.resolve_sameas_config_recursively(config)  # resolve "same_as" reference fields to dictionary objects.
-        self.description: str = config.pop("description", "no description given.")
-        self.random_seed: Optional[int] = config.pop("random_seed")
-        self.use_cuda: bool = config.pop("use_cuda")
-        self.cudnn_enabled: bool = config.pop("cudnn_enabled")
-        self.cudnn_benchmark: bool = config.pop("cudnn_benchmark")
-        self.cudnn_deterministic: bool = config.pop("cudnn_deterministic")
-        self.cuda_non_blocking: bool = config.pop("cuda_non_blocking")
-        self.fp16_train: bool = config.pop("fp16_train")
-        self.fp16_val: bool = config.pop("fp16_val")
-
-    def post_init(self):
-        """
-        Check config dict for correctness and raise
-
-        Returns:
-        """
-        if self.strict:
-            utils.check_config_dict(self.__class__.__name__, self.config)
-
-
-class DefaultExperimentConfig(BaseExperimentConfig):
-    """
-    Default configuration class.
-
-    Args:
-        config: Configuration dictionary to be loaded.
-    """
-
-    def __init__(self, config: Dict) -> None:
-        super().__init__(config)
-        self.name = "config_default"
-        self.train = BaseTrainConfig(config.pop(ConfigNamesConst.TRAIN))
-        self.val = BaseValConfig(config.pop(ConfigNamesConst.VAL))
-        self.dataset_train = BaseDatasetConfig(config.pop(ConfigNamesConst.DATASET_TRAIN))
-        self.dataset_val = BaseDatasetConfig(config.pop(ConfigNamesConst.DATASET_VAL))
-        self.logging = BaseLoggingConfig(config.pop(ConfigNamesConst.LOGGING))
-        self.saving = BaseSavingConfig(config.pop(ConfigNamesConst.SAVING))
-        self.optimizer = optimization.OptimizerConfig(config.pop(ConfigNamesConst.OPTIMIZER))
-        self.lr_scheduler = lr_scheduler.SchedulerConfig(config.pop(ConfigNamesConst.LR_SCHEDULER))
-
-
-class BaseTrainConfig(ConfigClass):
+class TrainConfig(ConfigClass):
     """
     Base configuration class for training.
 
@@ -401,7 +315,7 @@ class BaseTrainConfig(ConfigClass):
         assert isinstance(self.clip_gradient, (int, float)) and self.clip_gradient >= -1
 
 
-class BaseValConfig(ConfigClass):
+class ValConfig(ConfigClass):
     """
     Base configuration class for validation.
 
@@ -428,7 +342,7 @@ class BaseValConfig(ConfigClass):
         assert isinstance(self.det_best_terminate_after, int) and self.det_best_terminate_after >= -1
 
 
-class BaseSavingConfig(ConfigClass):
+class SavingConfig(ConfigClass):
     """
     Base Saving Configuration Class
 
@@ -449,30 +363,7 @@ class BaseSavingConfig(ConfigClass):
         self.save_opt_state: bool = config.pop("save_opt_state")
         assert self.keep_freq >= -1
 
-
-class BaseDatasetConfig(ConfigClass):
-    """
-    Base Dataset Configuration class
-
-    Args:
-        config: Configuration dictionary to be loaded, dataset part.
-    """
-
-    def __init__(self, config: Dict) -> None:
-        # general dataset info
-        self.name: str = config.pop("name")
-        self.data_type: str = config.pop("data_type")
-        self.subset: str = config.pop("subset")
-        self.split: str = config.pop("split")
-        self.max_datapoints: int = config.pop("max_datapoints")
-        self.shuffle: bool = config.pop("shuffle")
-        # general dataloader configuration
-        self.pin_memory: bool = config.pop("pin_memory")
-        self.num_workers: int = config.pop("num_workers")
-        self.drop_last: bool = config.pop("drop_last")
-
-
-class BaseLoggingConfig(ConfigClass):
+class LoggingConfig(ConfigClass):
     """
     Base Logging Configuration Class
 
@@ -489,6 +380,30 @@ class BaseLoggingConfig(ConfigClass):
         assert self.step_val >= -1
         assert self.step_gpu >= -1
         assert self.step_gpu_once >= -1
+
+class TrainerState(baseconfig.SaveableBaseModel):
+    """
+    Current trainer state that must be saved for training continuation..
+    """
+    # total time bookkeeping
+    time_total: float = 0
+    time_val: float = 0
+    
+    # state info TO SAVE
+    start_epoch: int = 0
+    current_epoch: int = 0
+    epoch_step: int = 0
+    total_step: int = 0
+    det_best_field_current: float = 0
+    det_best_field_best: Optional[float] = None
+
+    # state info lists
+    infos_val_epochs: List[int] = []
+    infos_val_steps: List[int] = []
+    infos_val_is_good: List[int] = []
+
+    # logging
+    last_grad_norm: int = 0
 
 
 

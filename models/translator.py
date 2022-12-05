@@ -24,10 +24,11 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from datasets.bila import BilaDataset as RCDataset
+from datasets.bila import BilaDataset
 from utils.configs import Config
 from models.beam_search import BeamSearch
 from utils import utils
+from utils.utils import INFO
 
 
 def tile(x, count, dim=0):
@@ -55,7 +56,7 @@ def tile(x, count, dim=0):
 
 
 def mask_tokens_after_eos(
-    input_ids, input_masks, eos_token_id=RCDataset.EOS, pad_token_id=RCDataset.PAD
+    input_ids, input_masks, eos_token_id=BilaDataset.EOS, pad_token_id=BilaDataset.PAD
 ):
     """
     replace values after `[EOS]` with `[PAD]`,
@@ -85,8 +86,9 @@ class Translator(object):
         self.logger = logger
         if self.logger is None:
             self.logger = utils.create_logger_without_file(
-                "translator", log_level=utils.LogLevelsConst.INFO
+                "translator", log_level=INFO
             )
+    
     def translate_batch_greedy(
         self,
         input_ids_list,
@@ -104,8 +106,8 @@ class Translator(object):
             model,
             max_v_len,
             max_t_len,
-            start_idx=RCDataset.BOS,
-            unk_idx=RCDataset.UNK,
+            start_idx=BilaDataset.BOS,
+            unk_idx=BilaDataset.UNK,
         ):
             """
             RTransformer The first few args are the same to the input to the forward_step func
@@ -119,30 +121,30 @@ class Translator(object):
             """
             bsz = len(input_ids)
             next_symbols = torch.LongTensor([start_idx] * bsz)  # (N, )
+            
             for dec_idx in range(max_v_len, max_v_len + max_t_len):
                 input_ids[:, dec_idx] = next_symbols
                 input_masks[:, dec_idx] = 1
                 copied_prev_ms = copy.deepcopy(
                     prev_ms_
                 )  # since the func is changing data inside
+                
                 _, pred_scores, _ = model.forward_step(
                     input_ids,
                     video_features,
                     input_masks,
                     token_type_ids
                 )
+                
                 # suppress unk token; (N, L, vocab_size)
                 pred_scores[:, :, unk_idx] = -1e10
-                # next_words = pred_scores.max(2)[1][:, dec_idx]
+                
                 next_words = pred_scores[:, dec_idx].max(1)[1]
                 next_symbols = next_words
 
             # compute memory, mimic the way memory is generated at training time
             input_ids, input_masks = mask_tokens_after_eos(input_ids, input_masks)
-            return (
-                copied_prev_ms,
-                input_ids[:, max_v_len:],
-            )  # (N, max_t_len == L-max_v_len)
+            return (copied_prev_ms, input_ids[:, max_v_len:],)
 
         input_ids_list, input_masks_list = self.prepare_video_only_inputs(
             input_ids_list, input_masks_list, token_type_ids_list
@@ -208,14 +210,14 @@ class Translator(object):
             video_only_input_masks_list = []
             for e1, e2, e3 in zip(input_ids, input_masks, segment_ids):
                 text_mask = e3 == 1  # text positions (`1`) are replaced
-                e1[text_mask] = RCDataset.PAD
+                e1[text_mask] = BilaDataset.PAD
                 e2[text_mask] = 0  # mark as invalid bits
                 video_only_input_ids_list.append(e1)
                 video_only_input_masks_list.append(e2)
             return video_only_input_ids_list, video_only_input_masks_list
         else:
             text_mask = segment_ids == 1
-            input_ids[text_mask] = RCDataset.PAD
+            input_ids[text_mask] = BilaDataset.PAD
             input_masks[text_mask] = 0
             return input_ids, input_masks
 
@@ -226,8 +228,5 @@ class Translator(object):
         """
         final_res_dict = {}
         for k, v in list(res_dict.items()):
-            # final_res_dict[k] = sorted(v, key=lambda x: float(x["timestamp"][0]))
-            # final_res_dict[k] = sorted(v, key=lambda x: float(x["timestamp"]))
-            # print(v)
             final_res_dict[k] = sorted(v, key=lambda x: float(x["clip_id"]))
         return final_res_dict

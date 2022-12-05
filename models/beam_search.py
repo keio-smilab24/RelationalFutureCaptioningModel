@@ -367,9 +367,7 @@ class BeamSearch(DecodeStrategy):
         self.ensure_min_length(log_probs)
 
         # Multiply probs by the beam probability.
-        # logger.info("after log_probs {} {}".format(log_probs.shape, log_probs))
         log_probs += self.topk_log_probs.view(_B * self.beam_size, 1)
-        # logger.info("after log_probs {} {}".format(log_probs.shape, log_probs))
 
         self.block_ngram_repeats(log_probs)
 

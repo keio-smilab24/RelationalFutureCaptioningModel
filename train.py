@@ -6,8 +6,7 @@ import numpy as np
 from trainer import Trainer
 from models.model import create_model
 from datasets.bila import create_datasets_and_loaders
-from utils.utils_yaml import load_yaml_to_config
-from utils.utils import fix_seed
+from utils.utils import fix_seed, load_yaml_to_config
 from utils.arguments import set_parser
 from utils.configs import Config, get_config_file, update_config_from_args
 
@@ -56,7 +55,7 @@ def main():
             cfg, model, run_name, len(train_loader), log_dir=args.log_dir,
             log_level=args.log_level, logger=None, reset=args.reset, load_best=load_best,
             load_epoch=args.load_epoch, load_model=args.load_model, is_test=args.validate,
-            annotations_dir=args.data_dir)
+            data_dir=args.data_dir, show_log=args.show_log,)
 
         if args.validate:
             if not trainer.load and not args.ignore_untrained:

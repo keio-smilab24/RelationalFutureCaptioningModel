@@ -200,7 +200,7 @@ class MetricsWriter:
         self.tensorb_writer = SummaryWriter(log_dir=self.exp.path_tensorb)
 
     def add_meter(self, meter_name: str, *, per_step: bool = False, use_value: bool = True, use_avg: bool = True,
-                  reset_avg_each_epoch: bool = False, no_tensorboard: bool = False) -> None:
+                    reset_avg_each_epoch: bool = False, no_tensorboard: bool = False) -> None:
         """
         Create meter with name and settings.
 
