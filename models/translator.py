@@ -79,7 +79,10 @@ class Translator(object):
     """
 
     def __init__(
-        self, model: nn.Module, cfg: Config, logger: Optional[logging.Logger] = None
+        self,
+        model: nn.Module,
+        cfg: Config,
+        logger: Optional[logging.Logger] = None
     ):
         self.model = model
         self.cfg = cfg
@@ -137,6 +140,7 @@ class Translator(object):
                 )
                 
                 # suppress unk token; (N, L, vocab_size)
+                # すべての単語の予測確率
                 pred_scores[:, :, unk_idx] = -1e10
                 
                 next_words = pred_scores[:, dec_idx].max(1)[1]

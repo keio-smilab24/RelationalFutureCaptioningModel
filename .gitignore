@@ -23,6 +23,9 @@ NotUse/
 *_old/
 results/
 
+# ----- test ------
+test.py
+
 
 # ---------- general
 

@@ -18,7 +18,7 @@ from tqdm import tqdm
 import cv2
 
 from utils.configs import Config
-from utils.baseconfig import ConfigClass, ConstantHolder
+from utils.baseconfig import ConstantHolder
 
 class DataTypesConstCaption(ConstantHolder):
     """
@@ -223,8 +223,8 @@ class BilaDataset(data.Dataset):
         self.preloading_done = False
 
     def __len__(self):
-        # return len(self.data)
-        return int(len(self.data)/20)
+        return len(self.data)
+        # return int(len(self.data)/20)
 
     def __getitem__(self, index):
         items, meta = self.convert_example_to_features(self.data[index])
@@ -418,6 +418,9 @@ class BilaDataset(data.Dataset):
         mask = [1] * self.max_v_len
         
         # img + text の特徴を作成 + imgの特徴量を格納
+        # TODO : 一旦バラバラにしてmodel中でconcat
+        # (1) 事前にpretrain済みのモデルを使用して予め保存しておく
+        # (2) モデルの中で言語と画像を合わせる
         feat = np.zeros((self.max_v_len + self.max_t_len, img_list[0].shape[1]))
         for idx in range(len(img_list)):
             feat[idx+1] = img_list[idx]

@@ -7,7 +7,6 @@
 例: python utils/compare_res.py -i results/linear_to_cnn/caption/translations_29_test.json -o results/linear_to_cnn/compare.csv
 """
 
-import sys
 import csv
 import json
 
