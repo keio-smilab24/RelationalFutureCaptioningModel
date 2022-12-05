@@ -4,10 +4,12 @@ import torch
 from torch import nn
 import torchvision.models as models
 
+from models.cnn import ConvNeXt
 
-class ImgEmbedder(nn.Module):
+
+class ImgEmbedder2(nn.Module):
     def __init__(self):
-        super(ImgEmbedder, self).__init__()
+        super(ImgEmbedder2, self).__init__()
 
         self.resnet = models.resnet50(pretrained=True)
         self.fc1 = nn.Linear(1024, 768)
@@ -27,6 +29,21 @@ class ImgEmbedder(nn.Module):
         x = self.conv2(x)
         x = self.conv3(x)
         x = torch.reshape(x,(B,L,768))
+
+        return x
+
+
+class ImgEmbedder(nn.Module):
+    def __init__(self):
+        super(ImgEmbedder, self).__init__()
+
+        self.convnext = ConvNeXt()
+    
+    def forward(self, x: torch.Tensor):
+        B, L, _ = x.size()
+        x = x.view(-1, 3, 224, 224)
+        x = self.convnext(x)
+        x = x.view(size=(B, L, -1))
 
         return x
 
