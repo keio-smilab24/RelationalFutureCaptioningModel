@@ -115,8 +115,10 @@ class BilaDataset(data.Dataset):
         annotations_dir: str = "data",
         preload: bool = False,
         datatype: str = "bila",
+        clip_dim: int = 768,
     ):
         self.datatype = datatype
+        self.clip_dim = clip_dim
 
         # metadata settings
         self.dataset_name = dataset_name # BILA
@@ -176,8 +178,8 @@ class BilaDataset(data.Dataset):
         if not os.path.exists(self.word2idx_file):
             make_dict(data_path, self.word2idx_file, datatype)
         
-        self.word2idx = json.load(self.word2idx_file.open("rt", encoding="utf8")) # 辞書 {word : ID(int)}
-        self.idx2word = {int(v): k for k, v in list(self.word2idx.items())} # 逆
+        self.word2idx = json.load(self.word2idx_file.open("rt", encoding="utf8"))
+        self.idx2word = {int(v): k for k, v in list(self.word2idx.items())}
         print(f"WORD2IDX: {self.word2idx_file} len {len(self.word2idx)}")
 
         # load and process captions and video data
@@ -202,25 +204,12 @@ class BilaDataset(data.Dataset):
         
         self.data = coll_data
 
-        # ---------- Load video data ----------
-
-        # Decide whether to load COOT embeddings or video features
-        
-        # COOT embeddings
-        self.data_type = DataTypesConstCaption.COOT_EMB # coot_emb
-        
         # map video id and clip id to clip number
         self.clip_nums = []
         for clip in tqdm(range(len(self.data))):
             self.clip_nums.append(str(clip)) # ['0', '1', ..., '999']
 
-        self.frame_to_second = None  # Don't need this for COOT embeddings # None
-
-        print(
-            f"Dataset {self.dataset_name} #{len(self)} {self.mode} input {self.data_type}"
-        )
-
-        self.preloading_done = False
+        print(f"Dataset {self.dataset_name} #{len(self)} {self.mode}")
 
     def __len__(self):
         return len(self.data)
@@ -230,7 +219,7 @@ class BilaDataset(data.Dataset):
         items, meta = self.convert_example_to_features(self.data[index])
         return items, meta
 
-    def _load_ponnet_video_feature(
+    def _load_ponnet_image(
         self,
         raw_name: str,
         base_frame: float=4.2,
@@ -258,7 +247,6 @@ class BilaDataset(data.Dataset):
                 frame -= interval
                 img_path = os.path.join(data_dir, f"{frame:.1f}s_center_frames", raw_name+".png")
                 img = torch.from_numpy(cv2.imread(img_path).astype(np.float32)).clone()
-                img = img.reshape(-1, 150528)
                 img_list.insert(0, img)
             
             rec_img = cv2.imread(os.path.join(data_dir, f"{frame:.1f}s_center_frames", raw_name+".png"))
@@ -294,7 +282,7 @@ class BilaDataset(data.Dataset):
                 if img_list_path[idx] == "image_rgb":
                     rec_img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(16, 16))
                 
-                img = torch.from_numpy(cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(224, 224))).reshape(-1, 150528)
+                img = torch.from_numpy(cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(224, 224)))
                 img_list.append(img)
 
         return img_list, rec_img
@@ -317,7 +305,7 @@ class BilaDataset(data.Dataset):
         }
         """
         raw_name = example["clip_id"] # clip_id : VideoID/SceneID
-        img_list, rec_img = self._load_ponnet_video_feature(raw_name)
+        img_list, rec_img = self._load_ponnet_image(raw_name)
         
         single_video_features = []
         single_video_meta = []
@@ -354,7 +342,7 @@ class BilaDataset(data.Dataset):
         """
 
         # 画像の特徴量 + textの特徴量を合わせた形状のfeatと画像用のmaskを作成
-        feat, video_tokens, video_mask = self._load_indexed_video_feature(img_list)
+        img_feats, text_feats, video_tokens, video_mask = self._load_features(img_list)
 
         # text用のtokenとmaskを作成
         text_tokens, text_mask = self._tokenize_pad_sentence(sentence)
@@ -386,7 +374,8 @@ class BilaDataset(data.Dataset):
             input_labels=np.array(input_labels).astype(np.int64),
             input_mask=np.array(input_mask).astype(np.float32),
             token_type_ids=np.array(token_type_ids).astype(np.int64),
-            video_feature=feat.astype(np.float32),
+            img_feats=img_feats.astype(np.float32),
+            text_feats=text_feats.astype(np.float32),
             gt_rec = gt_rec,
         )
         meta = dict(name=name, sentence=sentence)
@@ -394,7 +383,7 @@ class BilaDataset(data.Dataset):
         return data, meta
 
 
-    def _load_indexed_video_feature(
+    def _load_features(
         self,
         img_list: list,
     ):
@@ -417,15 +406,14 @@ class BilaDataset(data.Dataset):
         # TODO : 質問ver3.4
         mask = [1] * self.max_v_len
         
-        # img + text の特徴を作成 + imgの特徴量を格納
-        # TODO : 一旦バラバラにしてmodel中でconcat
-        # (1) 事前にpretrain済みのモデルを使用して予め保存しておく
-        # (2) モデルの中で言語と画像を合わせる
-        feat = np.zeros((self.max_v_len + self.max_t_len, img_list[0].shape[1]))
-        for idx in range(len(img_list)):
-            feat[idx+1] = img_list[idx]
+        # img / text の特徴を作成
+        img_feats = np.zeros((self.max_v_len, *img_list[0].shape))
+        text_feats = np.zeros((self.max_t_len, self.clip_dim))
 
-        return feat, video_tokens, mask
+        for idx in range(len(img_list)):
+            img_feats[idx+1] = img_list[idx]
+
+        return img_feats, text_feats, video_tokens, mask
 
     def _tokenize_pad_sentence(self, sentence):
         """
@@ -552,6 +540,7 @@ def create_datasets_and_loaders(
     cfg: Config,
     annotations_dir: str,
     datatype: str = 'bila',
+    clip_dim: int = 768,
 ) -> Tuple[BilaDataset, BilaDataset, DataLoader, DataLoader]:
     # create the dataset
     dset_name_train = cfg.dataset_train.name
@@ -564,6 +553,7 @@ def create_datasets_and_loaders(
         annotations_dir=annotations_dir,
         preload=cfg.dataset_train.preload,
         datatype=datatype,
+        clip_dim=clip_dim,
     )
     # add 10 at max_n_sen to make the inference stage use all the segments
     # max_n_sen_val = cfg.max_n_sen + 10
@@ -577,6 +567,7 @@ def create_datasets_and_loaders(
         annotations_dir=annotations_dir,
         preload=cfg.dataset_val.preload,
         datatype=datatype,
+        clip_dim=clip_dim,
     )
 
     train_loader = data.DataLoader(
@@ -604,6 +595,7 @@ def create_datasets_and_loaders(
         annotations_dir=annotations_dir,
         preload=cfg.dataset_val.preload,
         datatype=datatype,
+        clip_dim=clip_dim,
     )
     test_loader = data.DataLoader(
         test_dataset,

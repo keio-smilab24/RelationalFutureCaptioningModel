@@ -35,7 +35,7 @@ class RecursiveTransformer(nn.Module):
         self.size_adjust = CNN(num_channels=3)
         self.img_embedder = ImgEmbedder()
         self.embeddings = MultiModalEmbedding(cfg, add_postion_embeddings=True)
-        self.TSModule = RSAEncoder(cfg)
+        self.RSAEncoder = RSAEncoder(cfg)
         self.encoder = TransformerEncoder(cfg)
         
         decoder_classifier_weight = (
@@ -80,7 +80,8 @@ class RecursiveTransformer(nn.Module):
     def forward_step(
         self,
         input_ids: torch.Tensor,
-        features: torch.Tensor,
+        img_feats: torch.Tensor,
+        text_feats: torch.Tensor,
         input_masks: torch.Tensor,
         token_type_ids: torch.Tensor
     ):
@@ -88,19 +89,16 @@ class RecursiveTransformer(nn.Module):
             singleure step forward in the recursive struct
         Args:
             input_ids (torch.Tensor):
-            video_features (torch.Tensor):
+            img_feats (torch.Tensor)
+            text_feats (torch.Tensor)
             input_masks (torch.Tensor):
             token_type_ids (torch.Tensor):
         """
-        # 画像特徴だけ抽出
-        img_feats = features[:, 1:self.cfg.max_v_len-1, :].clone()  # (B, 7, 150528)
-        features = self.size_adjust(features) # (B, 31, 150528) -> (B, 31, 768)
-
-        self.pred_reconst = []
-        self.gt_rec = []
+        # 画像特徴の次元を調整 : ConvNeXt
+        img_feats = self.img_embedder(img_feats)
         
-        # resnetを用いた特徴量抽出
-        features[:, 1:self.cfg.max_v_len-1, :] = self.img_embedder(img_feats)
+        # concat
+        features = torch.cat([img_feats, text_feats], dim=1)
 
         # 再構成用
         rec_feature = features[:,1,:].clone()
@@ -108,7 +106,7 @@ class RecursiveTransformer(nn.Module):
         img_feats = features[:, 1:self.cfg.max_v_len-1, :].clone()
 
         # Time Series Module
-        _, img_feats = self.TSModule(img_feats)
+        _, img_feats = self.RSAEncoder(img_feats)
 
         embeddings = self.embeddings(input_ids, features, token_type_ids)
         encoded_layer_outputs = self.encoder(
@@ -125,7 +123,8 @@ class RecursiveTransformer(nn.Module):
     def forward(
         self,
         input_ids_list,
-        video_features_list,
+        img_feats_list,
+        text_feats_list,
         input_masks_list,
         token_type_ids_list,
         input_labels_list,
@@ -134,7 +133,8 @@ class RecursiveTransformer(nn.Module):
         """
         Args:
             input_ids_list: [(N, L)] * step_size
-            video_features_list: [(N, L, D_v)] * step_size
+            img_feats_list: TODO
+            text_feats_list: TODO
             input_masks_list: [(N, L)] * step_size with 1 indicates valid bits
             token_type_ids_list: [(N, L)] * step_size, with `0` on the first `max_v_len` bits,
                 `1` on the last `max_t_len`
@@ -155,7 +155,8 @@ class RecursiveTransformer(nn.Module):
             for idx in range(step_size):
                 encoded_layer_outputs, prediction_scores, pred_tmp = self.forward_step(
                     input_ids_list[idx],
-                    video_features_list[idx],
+                    img_feats_list[idx],
+                    text_feats_list[idx],
                     input_masks_list[idx],
                     token_type_ids_list[idx]
                 )
@@ -168,7 +169,8 @@ class RecursiveTransformer(nn.Module):
             for idx in range(step_size):
                 encoded_layer_outputs, prediction_scores = self.forward_step(
                     input_ids_list[idx],
-                    video_features_list[idx],
+                    img_feats_list[idx],
+                    text_feats_list[idx],
                     input_masks_list[idx],
                     token_type_ids_list[idx]
                 )
