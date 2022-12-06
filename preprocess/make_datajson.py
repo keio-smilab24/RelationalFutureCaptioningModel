@@ -1,6 +1,4 @@
-from email.policy import default
 import json
-import os
 from pathlib import Path
 
 from classopt import classopt, config

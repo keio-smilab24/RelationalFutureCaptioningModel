@@ -115,8 +115,10 @@ class BilaDataset(data.Dataset):
         annotations_dir: str = "data",
         preload: bool = False,
         datatype: str = "bila",
+        clip_dim: int = 768,
     ):
         self.datatype = datatype
+        self.clip_dim = clip_dim
 
         # metadata settings
         self.dataset_name = dataset_name # BILA
@@ -294,7 +296,7 @@ class BilaDataset(data.Dataset):
                 if img_list_path[idx] == "image_rgb":
                     rec_img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(16, 16))
                 
-                img = torch.from_numpy(cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(224, 224))).reshape(-1, 150528)
+                img = torch.from_numpy(cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(224, 224)))
                 img_list.append(img)
 
         return img_list, rec_img
@@ -354,7 +356,7 @@ class BilaDataset(data.Dataset):
         """
 
         # 画像の特徴量 + textの特徴量を合わせた形状のfeatと画像用のmaskを作成
-        feat, video_tokens, video_mask = self._load_indexed_video_feature(img_list)
+        img_features, text_features, video_tokens, video_mask = self._load_indexed_video_feature(img_list)
 
         # text用のtokenとmaskを作成
         text_tokens, text_mask = self._tokenize_pad_sentence(sentence)
@@ -386,7 +388,8 @@ class BilaDataset(data.Dataset):
             input_labels=np.array(input_labels).astype(np.int64),
             input_mask=np.array(input_mask).astype(np.float32),
             token_type_ids=np.array(token_type_ids).astype(np.int64),
-            video_feature=feat.astype(np.float32),
+            img_features=img_features.astype(np.float32),
+            text_features=text_features.astype(np.float32),
             gt_rec = gt_rec,
         )
         meta = dict(name=name, sentence=sentence)
@@ -418,14 +421,13 @@ class BilaDataset(data.Dataset):
         mask = [1] * self.max_v_len
         
         # img + text の特徴を作成 + imgの特徴量を格納
-        # TODO : 一旦バラバラにしてmodel中でconcat
-        # (1) 事前にpretrain済みのモデルを使用して予め保存しておく
-        # (2) モデルの中で言語と画像を合わせる
-        feat = np.zeros((self.max_v_len + self.max_t_len, img_list[0].shape[1]))
-        for idx in range(len(img_list)):
-            feat[idx+1] = img_list[idx]
+        img_features = np.zeros((self.max_v_len, *img_list[0].shape)) # (8, 224, 224, 3)
+        text_features = np.zeros((self.max_t_len, self.clip_dim)) # (55, 768)
 
-        return feat, video_tokens, mask
+        for idx in range(len(img_list)):
+            img_features[idx+1] = img_list[idx]
+
+        return img_features, text_features, video_tokens, mask
 
     def _tokenize_pad_sentence(self, sentence):
         """
@@ -564,6 +566,7 @@ def create_datasets_and_loaders(
         annotations_dir=annotations_dir,
         preload=cfg.dataset_train.preload,
         datatype=datatype,
+        clip_dim=cfg.clip_dim,
     )
     # add 10 at max_n_sen to make the inference stage use all the segments
     # max_n_sen_val = cfg.max_n_sen + 10
@@ -577,6 +580,7 @@ def create_datasets_and_loaders(
         annotations_dir=annotations_dir,
         preload=cfg.dataset_val.preload,
         datatype=datatype,
+        clip_dim=cfg.clip_dim,
     )
 
     train_loader = data.DataLoader(
@@ -604,6 +608,7 @@ def create_datasets_and_loaders(
         annotations_dir=annotations_dir,
         preload=cfg.dataset_val.preload,
         datatype=datatype,
+        clip_dim=cfg.clip_dim,
     )
     test_loader = data.DataLoader(
         test_dataset,
