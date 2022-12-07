@@ -288,7 +288,7 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
-            if cfg.ema_decay > 0: # true
+            if cfg.ema_decay > 0:
                 # register EMA params
                 self.logger.info(
                     f"Registering {sum(p.numel() for p in model.parameters())} params for EMA"
@@ -315,7 +315,7 @@ class Trainer:
         # post init hook for checkpoint loading
         self.hook_post_init()
 
-        if self.load and not self.load_model: # false ane none = false
+        if self.load and not self.load_model:
             # reload EMA weights from checkpoint (the shadow) and save the model parameters (the original)
             ema_file = self.exp.get_models_file_ema(self.load_ep)
             self.logger.info(f"Update EMA from {ema_file}")
@@ -323,8 +323,7 @@ class Trainer:
             self.ema.assign(self.model, update_model=False)
 
         # disable ema when loading model directly or when decay is 0 / -1
-        if self.load_model or cfg.ema_decay <= 0: # none and 0.999 = false
-            print('AAAAAAAAAAAAAAAAAAAA')
+        if self.load_model or cfg.ema_decay <= 0:
             self.ema = None
 
         self.train_steps = 0
@@ -360,7 +359,6 @@ class Trainer:
                 and self.state.current_epoch != 0
                 and self.cfg.ema_decay != -1
             ):
-                # 2epoch以降目は通る
                 # use normal parameters for training, not EMA model
                 self.ema.resume(self.model)
             
@@ -393,8 +391,7 @@ class Trainer:
                     ]
 
                     input_ids_list = [e["input_ids"] for e in batched_data]
-                    img_features_list = [e['img_features'] for e in batched_data]
-                    text_featuers_list = [e["text_features"] for e in batched_data]
+                    video_features_list = [e["video_feature"] for e in batched_data]
                     input_masks_list = [e["input_mask"] for e in batched_data]
                     token_type_ids_list = [e["token_type_ids"] for e in batched_data]
                     input_labels_list = [e["input_labels"] for e in batched_data]
@@ -416,8 +413,7 @@ class Trainer:
 
                     loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                         input_ids_list,
-                        img_features_list,
-                        text_featuers_list,
+                        video_features_list,
                         input_masks_list,
                         token_type_ids_list,
                         input_labels_list,
@@ -608,8 +604,7 @@ class Trainer:
                 ]
                 # validate (ground truth as input for next token)
                 input_ids_list = [e["input_ids"] for e in batched_data]
-                img_features_list = [e["img_features"] for e in batched_data]
-                text_features_list = [e["text_features"] for e in batched_data]
+                video_features_list = [e["video_feature"] for e in batched_data]
                 input_masks_list = [e["input_mask"] for e in batched_data]
                 token_type_ids_list = [e["token_type_ids"] for e in batched_data]
                 input_labels_list = [e["input_labels"] for e in batched_data]
@@ -617,8 +612,7 @@ class Trainer:
 
                 loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                     input_ids_list,
-                    img_features_list,
-                    text_features_list,
+                    video_features_list,
                     input_masks_list,
                     token_type_ids_list,
                     input_labels_list,
@@ -635,8 +629,7 @@ class Trainer:
 
                 model_inputs = [
                     [e["input_ids"] for e in batched_data],
-                    [e["img_features"] for e in batched_data],
-                    [e["text_features"] for e in batched_data],
+                    [e["video_feature"] for e in batched_data],
                     [e["input_mask"] for e in batched_data],
                     [e["token_type_ids"] for e in batched_data],
                 ]
@@ -896,8 +889,7 @@ class Trainer:
                 ]
                 # validate (ground truth as input for next token)
                 input_ids_list = [e["input_ids"] for e in batched_data]
-                img_features_list = [e["img_features"] for e in batched_data]
-                text_features_list = [e["text_features"] for e in batched_data]
+                video_features_list = [e["video_feature"] for e in batched_data]
                 input_masks_list = [e["input_mask"] for e in batched_data]
                 token_type_ids_list = [e["token_type_ids"] for e in batched_data]
                 input_labels_list = [e["input_labels"] for e in batched_data]
@@ -905,8 +897,7 @@ class Trainer:
 
                 loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                     input_ids_list,
-                    img_features_list,
-                    text_features_list,
+                    video_features_list,
                     input_masks_list,
                     token_type_ids_list,
                     input_labels_list,
@@ -923,8 +914,7 @@ class Trainer:
 
                 model_inputs = [
                     [e["input_ids"] for e in batched_data],
-                    [e["img_features"] for e in batched_data],
-                    [e["text_features"] for e in batched_data],
+                    [e["video_feature"] for e in batched_data],
                     [e["input_mask"] for e in batched_data],
                     [e["token_type_ids"] for e in batched_data],
                 ]

@@ -95,8 +95,7 @@ class Translator(object):
     def translate_batch_greedy(
         self,
         input_ids_list,
-        img_features_list,
-        text_features_list,
+        video_features_list,
         input_masks_list,
         token_type_ids_list,
         rt_model,
@@ -104,8 +103,7 @@ class Translator(object):
         def greedy_decoding_step(
             prev_ms_,
             input_ids,
-            img_features,
-            text_features,
+            video_features,
             input_masks,
             token_type_ids,
             model,
@@ -136,8 +134,7 @@ class Translator(object):
                 
                 _, pred_scores, _ = model.forward_step(
                     input_ids,
-                    img_features,
-                    text_features,
+                    video_features,
                     input_masks,
                     token_type_ids
                 )
@@ -170,8 +167,7 @@ class Translator(object):
                 prev_ms, dec_seq = greedy_decoding_step(
                     prev_ms,
                     input_ids_list[idx],
-                    img_features_list[idx],
-                    text_features_list[idx],
+                    video_features_list[idx],
                     input_masks_list[idx],
                     token_type_ids_list[idx],
                     rt_model,
@@ -191,15 +187,13 @@ class Translator(object):
         """
         (
             input_ids_list,
-            img_features_list,
-            text_features_list,
+            video_features_list,
             input_masks_list,
             token_type_ids_list,
         ) = model_inputs
         return self.translate_batch_greedy(
             input_ids_list,
-            img_features_list,
-            text_features_list,
+            video_features_list,
             input_masks_list,
             token_type_ids_list,
             self.model,

@@ -463,7 +463,7 @@ def _get_gputil_info():
 def count_parameters(model, verbose=True):
     """
     Summary:
-        model内の学習可能なパラメータ・固定パラメータの数を表示する
+        model内の学習可能なパラメータ・固定パラメータの数を返す
     """
     n_all = sum(p.numel() for p in model.parameters())
     n_frozen = sum(p.numel() for p in model.parameters() if not p.requires_grad)
