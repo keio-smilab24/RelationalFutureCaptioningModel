@@ -32,11 +32,13 @@ class TimeSeriesEncoder(nn.Module):
         self.cfg = cfg
         self.pe = PositionEncoding(n_filters=768)
         self.layers = nn.ModuleList([TrmEncLayer(self.cfg) for _ in range(num_layers)])
+        # self.ff = TrmFeedForward(self.cfg)
 
     def forward(self, x):
         x = self.pe(x)
         for layer in self.layers:
             x = layer(x)
+        # x = self.ff(x, x)
 
         return x
 
@@ -45,7 +47,10 @@ class TrmEncLayer(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
+        # self.attention = RelationalSelfAttention(cfg)
+        # self.attention = Attention(cfg)
         self.attention = MultiHeadRSA(cfg)
+        # self.output = TrmFeedForward(cfg)  # 全結合層
         self.hidden_size = cfg.hidden_size
 
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
@@ -59,15 +64,19 @@ class TrmEncLayer(nn.Module):
             x: (N, L, D)
         Returns:
         """
+        # x = self.LayerNorm(x)
         tmp_x = x.clone().cuda()      # (16, 7, 768)
         target = tmp_x.clone().cuda() # (16, 7, 768)
         target = self.attention(target, tmp_x)
         x = self.z * tmp_x + (1 - self.z) * target
         x = self.LayerNorm(x)
         tmp_x = x.clone().cuda()
+        # x = self.LayerNorm(x)
         x = self.ffn(x)
         x = self.rand * tmp_x + (1 - self.rand) * x
         x = self.LayerNorm(x)
+        # x = self.attention(x)
+        # x = self.output(x, x)  # (N, L, D)
         return x
 
 
@@ -91,6 +100,13 @@ class TransformerEncoder(nn.Module):
             hidden_states: (N, L, D)
             attention_mask: (N, L)
             output_all_encoded_layers:
+
+        Returns:
+        """
+        """
+        #TODO : 確認
+        output_all_encoded_layers = Falseの場合には
+        最後の出力だけ返すってこと??
         """
         all_encoder_layers = []
         for layer_idx, layer_module in enumerate(self.layer):
@@ -106,8 +122,15 @@ class LayerWoMemory(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.att_num = 2
+        # self.attention = nn.ModuleList(
+        #     [Attention(cfg) for _ in range(self.att_num)]
+        # )
+        # self.mmha = Attention(cfg)
+        # self.mha = Attention(cfg)
         self.attention = Attention(cfg)
         self.hidden_intermediate = Intermediate(cfg)
+        # self.output = Output(cfg)
+        # self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
         self.rand = torch.randn(1, requires_grad=True).cuda()
         self.rand_z = torch.randn(1, requires_grad=True).cuda()
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
@@ -125,12 +148,18 @@ class LayerWoMemory(nn.Module):
         shifted_self_mask = make_pad_shifted_mask(
             attention_mask, max_v_len, max_t_len
         )  # (N, L, L)
+        # attention_output = self.mmha(hidden_states, shifted_self_mask, clip_feats)
+        # attention_output = self.mha(attention_output)
         tmp_x = hidden_states.clone().cuda()
         hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.attention(hidden_states, shifted_self_mask, clip_feats)
         hidden_states = self.rand * tmp_x + (1 - self.rand) * hidden_states
         tmp_x = hidden_states.clone().cuda()
         hidden_states = self.LayerNorm(hidden_states)
+        # intermediate_output = self.ffn(attention_output)
+        # intermediate_output = self.LayerNorm(intermediate_output)
+        # attention_output = self.LayerNorm(hidden_states)
         intermediate_output = self.hidden_intermediate(hidden_states)
         layer_output = self.rand_z * tmp_x + (1 - self.rand_z) * intermediate_output
+        # intermediate_output = self.output(attention_output, hidden_states)
         return layer_output

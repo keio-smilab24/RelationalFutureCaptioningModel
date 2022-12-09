@@ -58,10 +58,11 @@ TRANSLATION_METRICS_LOG = ["Bleu_4", "METEOR", "ROUGE_L", "CIDEr", "re4"]
 
 class Trainer:
     """
+    Trainer for retrieval.
+
     Notes:
-        Setting up directories and logging,
-        determining device and moving models to cuda
-        setting up checkpoint loading and metrics.
+        The parent TrainerBase takes care of all the basic stuff: Setting up directories and logging,
+        determining device and moving models to cuda, setting up checkpoint loading and metrics.
 
     Args:
         cfg: Loaded configuration instance.
@@ -249,6 +250,7 @@ class Trainer:
         self.timedelta_step_backward: float = 0
         self.steps_per_epoch: int = 0
         
+        # ---------- additional metrics ----------
         # train loss and accuracy
         self.metrics.add_meter(MMeters.TRAIN_LOSS_PER_WORD, use_avg=False)
         self.metrics.add_meter(MMeters.TRAIN_ACC, use_avg=False)
@@ -267,9 +269,9 @@ class Trainer:
         self.lr_scheduler = None
         self.ema = EMA(cfg.ema_decay)
         self.best_epoch = 0
-        
-        # Prepare optimizer only when train
+        # skip optimizer if not training
         if not self.is_test:
+            # Prepare optimizer
             param_optimizer = list(model.named_parameters())
             no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
             optimizer_grouped_parameters = [
@@ -343,7 +345,7 @@ class Trainer:
         
         self.use_wandb = use_wandb
         if use_wandb:
-            wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}_convnext"
+            wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}_linear_to_cnn"
             wandb.init(name=wandb_name, project="BilaS")
         
         # time book-keeping etc.
