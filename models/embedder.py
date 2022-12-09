@@ -40,11 +40,10 @@ class ImgEmbedder(nn.Module):
         self.convnext = ConvNeXt()
     
     def forward(self, x: torch.Tensor):
-        B, L, H, W, C = x.size()
-        x = x.permute((0,1,4,2,3))
-        x = x.view(size=(-1, C, H, W))
+        B, L, _ = x.size()
+        x = x.view(-1, 3, 224, 224)
         x = self.convnext(x)
-        x = x.view(size=(B, L, *x.shape[1:]))
+        x = x.view(size=(B, L, -1))
 
         return x
 
