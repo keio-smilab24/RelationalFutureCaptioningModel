@@ -37,7 +37,7 @@ def main():
 
     # create dataset
     train_set, train_loader, _, val_loader, _, test_loader =\
-        create_datasets_and_loaders(cfg, args.data_dir, datatype=args.datatype)
+        create_datasets_and_loaders(cfg, args.data_dir, datatype=args.datatype, clip_dim=cfg.clip_dim)
 
     for i in range(args.start_run):
         run_date = datetime.datetime.now()
