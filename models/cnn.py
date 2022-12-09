@@ -28,14 +28,13 @@ class CNN(nn.Module):
 
         self.linear = nn.Linear(3136, 768)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x):
         """
         Args:
             x (torch.Tensor) : (B, 3*224*224)
         """
-        B, L, H, W, C = x.size()
-        x = x.permute((0,1,4,2,3)).contiguous()
-        x = x.view(-1, C, H, W)
+        B, L, D = x.size()
+        x = x.view(-1, 3, 224, 224)
 
         x = self.cnn1(x)
         x = self.bn1(x)
@@ -49,9 +48,9 @@ class CNN(nn.Module):
 
         x = self.flatten(x)
         x = self.linear(x)
-        
-        x = x.view(B, L, *x.shape[1:]) # (B, L, D)
-        
+
+        x = x.view(B, L, -1)
+
         return x
 
 

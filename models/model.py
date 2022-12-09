@@ -32,7 +32,7 @@ class RecursiveTransformer(nn.Module):
         self.cfg = cfg
         self.cfg.vocab_size = vocab_size
 
-        # self.size_adjust = CNN(num_channels=3)
+        self.size_adjust = CNN(num_channels=3)
         self.img_embedder = ImgEmbedder()
         self.embeddings = MultiModalEmbedding(cfg, add_postion_embeddings=True)
         self.TSModule = RSAEncoder(cfg)
@@ -60,6 +60,8 @@ class RecursiveTransformer(nn.Module):
         self.apply(self.init_bert_weights)
         self.cliploss = CLIPloss(hidden_dim=cfg.hidden_size, max_t_length=cfg.max_t_len)
 
+        self.idx = 0
+
     def init_bert_weights(self, module):
         """
         Initialize the weights.
@@ -78,8 +80,7 @@ class RecursiveTransformer(nn.Module):
     def forward_step(
         self,
         input_ids: torch.Tensor,
-        img_features: torch.Tensor,
-        text_features: torch.Tensor,
+        features: torch.Tensor,
         input_masks: torch.Tensor,
         token_type_ids: torch.Tensor
     ):
@@ -91,16 +92,20 @@ class RecursiveTransformer(nn.Module):
             input_masks (torch.Tensor):
             token_type_ids (torch.Tensor):
         """
-        # 画像特徴の次元の調整
-        # img_features = self.size_adjust(img_features) # (B,Lv,H,W,C) -> (B,Lv,D)
-        img_features = self.img_embedder(img_features)
-        # imgとtextの特徴量をcat
-        features = torch.cat([img_features.clone(), text_features.clone()], dim=1) # (B,L,D)
+        # 画像特徴だけ抽出
+        img_feats = features[:, 1:self.cfg.max_v_len-1, :].clone()  # (B, 7, 150528)
+        features = self.size_adjust(features) # (B, 31, 150528) -> (B, 31, 768)
+
+        self.pred_reconst = []
+        self.gt_rec = []
+        
+        # resnetを用いた特徴量抽出
+        features[:, 1:self.cfg.max_v_len-1, :] = self.img_embedder(img_feats)
 
         # 再構成用
         rec_feature = features[:,1,:].clone()
         # 画像特徴量only
-        img_feats = img_features[:,1:self.cfg.max_v_len-1,:].clone()
+        img_feats = features[:, 1:self.cfg.max_v_len-1, :].clone()
 
         # Time Series Module
         _, img_feats = self.TSModule(img_feats)
@@ -120,8 +125,7 @@ class RecursiveTransformer(nn.Module):
     def forward(
         self,
         input_ids_list,
-        img_features_list,
-        text_features_list,
+        video_features_list,
         input_masks_list,
         token_type_ids_list,
         input_labels_list,
@@ -151,8 +155,7 @@ class RecursiveTransformer(nn.Module):
             for idx in range(step_size):
                 encoded_layer_outputs, prediction_scores, pred_tmp = self.forward_step(
                     input_ids_list[idx],
-                    img_features_list[idx],
-                    text_features_list[idx],
+                    video_features_list[idx],
                     input_masks_list[idx],
                     token_type_ids_list[idx]
                 )
@@ -165,8 +168,7 @@ class RecursiveTransformer(nn.Module):
             for idx in range(step_size):
                 encoded_layer_outputs, prediction_scores = self.forward_step(
                     input_ids_list[idx],
-                    img_features_list[idx],
-                    text_features_list[idx],
+                    video_features_list[idx],
                     input_masks_list[idx],
                     token_type_ids_list[idx]
                 )
@@ -224,7 +226,7 @@ def create_model(
     model = RecursiveTransformer(cfg, vocab_size=vocab_size)
 
     # output model properties
-    if verbose:
+    if verbose: # true
         print(f"Model: {model.__class__.__name__}")
         count_parameters(model)
         if hasattr(model, "embeddings") and hasattr(model.embeddings, "word_embeddings"):
