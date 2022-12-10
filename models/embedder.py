@@ -7,9 +7,9 @@ import torchvision.models as models
 from models.cnn import ConvNeXt
 
 
-class ImgEmbedder2(nn.Module):
+class ImgEmbedder(nn.Module):
     def __init__(self):
-        super(ImgEmbedder2, self).__init__()
+        super(ImgEmbedder, self).__init__()
 
         self.resnet = models.resnet50(pretrained=True)
         self.fc1 = nn.Linear(1024, 768)
@@ -33,9 +33,9 @@ class ImgEmbedder2(nn.Module):
         return x
 
 
-class ImgEmbedder(nn.Module):
+class ConvNeXtEmbedder(nn.Module):
     def __init__(self):
-        super(ImgEmbedder, self).__init__()
+        super(ConvNeXtEmbedder, self).__init__()
 
         self.convnext = ConvNeXt()
     

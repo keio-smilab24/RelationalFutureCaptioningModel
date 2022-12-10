@@ -7,7 +7,7 @@ from losses.loss import LabelSmoothingLoss
 from utils.utils import count_parameters
 from losses.loss import CLIPloss
 from utils.configs import Config
-from models.embedder import ImgEmbedder, MultiModalEmbedding
+from models.embedder import ImgEmbedder, MultiModalEmbedding, ConvNeXtEmbedder
 from models.encoder import RSAEncoder, TransformerEncoder
 from models.decoder import TransformerDecoder, PredictionHead
 from models.cnn import CNN

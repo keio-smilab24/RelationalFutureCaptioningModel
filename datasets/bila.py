@@ -223,8 +223,8 @@ class BilaDataset(data.Dataset):
         self.preloading_done = False
 
     def __len__(self):
-        # return len(self.data)
-        return int(len(self.data)/20)
+        return len(self.data)
+        # return int(len(self.data)/20)
 
     def __getitem__(self, index):
         items, meta = self.convert_example_to_features(self.data[index])
