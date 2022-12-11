@@ -150,6 +150,7 @@ class Config(ConfigClass):
         self.num_hidden_layers: int = config.pop("num_hidden_layers")
         self.n_memory_cells: int = config.pop("n_memory_cells")
         self.share_wd_cls_weight: bool = config.pop("share_wd_cls_weight")
+        self.fix_resnet: bool = config.pop("fix_resnet")
 
         # optimization
         self.ema_decay: float = config.pop("ema_decay")

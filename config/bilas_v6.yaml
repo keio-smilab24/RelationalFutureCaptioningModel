@@ -52,7 +52,7 @@ dataset_val:
 max_n_sen: 12 # 6 activitynet, 12 youcook2
 max_n_sen_add_val: 10
 max_t_len: 55
-max_v_len: 8 # img_num + 2
+max_v_len: 6 # img_num + 2
 type_vocab_size: 2
 word_vec_size: 173
 # ---------- Model ----------
