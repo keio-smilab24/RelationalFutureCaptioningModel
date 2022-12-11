@@ -393,7 +393,8 @@ class Trainer:
                     ]
 
                     input_ids_list = [e["input_ids"] for e in batched_data]
-                    video_features_list = [e["video_feature"] for e in batched_data]
+                    img_feats_list = [e['img_feats'] for e in batched_data]
+                    txt_feats_list = [e['txt_feats'] for e in batched_data]
                     input_masks_list = [e["input_mask"] for e in batched_data]
                     token_type_ids_list = [e["token_type_ids"] for e in batched_data]
                     input_labels_list = [e["input_labels"] for e in batched_data]
@@ -415,7 +416,8 @@ class Trainer:
 
                     loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                         input_ids_list,
-                        video_features_list,
+                        img_feats_list,
+                        txt_feats_list,
                         input_masks_list,
                         token_type_ids_list,
                         input_labels_list,
@@ -606,7 +608,8 @@ class Trainer:
                 ]
                 # validate (ground truth as input for next token)
                 input_ids_list = [e["input_ids"] for e in batched_data]
-                video_features_list = [e["video_feature"] for e in batched_data]
+                img_feats_list = [e['img_feats'] for e in batched_data]
+                txt_feats_list = [e['txt_feats'] for e in batched_data]
                 input_masks_list = [e["input_mask"] for e in batched_data]
                 token_type_ids_list = [e["token_type_ids"] for e in batched_data]
                 input_labels_list = [e["input_labels"] for e in batched_data]
@@ -614,7 +617,8 @@ class Trainer:
 
                 loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                     input_ids_list,
-                    video_features_list,
+                    img_feats_list,
+                    txt_feats_list,
                     input_masks_list,
                     token_type_ids_list,
                     input_labels_list,
@@ -631,7 +635,8 @@ class Trainer:
 
                 model_inputs = [
                     [e["input_ids"] for e in batched_data],
-                    [e["video_feature"] for e in batched_data],
+                    [e["img_feats"] for e in batched_data],
+                    [e["txt_feats"] for e in batched_data],
                     [e["input_mask"] for e in batched_data],
                     [e["token_type_ids"] for e in batched_data],
                 ]
@@ -891,7 +896,8 @@ class Trainer:
                 ]
                 # validate (ground truth as input for next token)
                 input_ids_list = [e["input_ids"] for e in batched_data]
-                video_features_list = [e["video_feature"] for e in batched_data]
+                img_feats_list = [e["img_feats"] for e in batched_data]
+                txt_feats_list = [e["txt_feats"] for e in batched_data]
                 input_masks_list = [e["input_mask"] for e in batched_data]
                 token_type_ids_list = [e["token_type_ids"] for e in batched_data]
                 input_labels_list = [e["input_labels"] for e in batched_data]
@@ -899,7 +905,8 @@ class Trainer:
 
                 loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                     input_ids_list,
-                    video_features_list,
+                    img_feats_list,
+                    txt_feats_list,
                     input_masks_list,
                     token_type_ids_list,
                     input_labels_list,
@@ -916,7 +923,8 @@ class Trainer:
 
                 model_inputs = [
                     [e["input_ids"] for e in batched_data],
-                    [e["video_feature"] for e in batched_data],
+                    [e["img_feats"] for e in batched_data],
+                    [e["txt_feats"] for e in batched_data],
                     [e["input_mask"] for e in batched_data],
                     [e["token_type_ids"] for e in batched_data],
                 ]

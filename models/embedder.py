@@ -8,7 +8,7 @@ from models.cnn import ConvNeXt
 
 
 class ImgEmbedder(nn.Module):
-    def __init__(self):
+    def __init__(self, fix_resnet: bool=False):
         super(ImgEmbedder, self).__init__()
 
         self.resnet = models.resnet50(pretrained=True)
@@ -17,9 +17,13 @@ class ImgEmbedder(nn.Module):
         self.conv2 = nn.Conv2d(456, 512, 5, stride=3)
         self.conv3 = nn.Conv2d(512, 768, 8, stride=1)
 
+        if fix_resnet:
+            for params in self.resnet.parameters():
+                params.requires_grad = False
+
     def forward(self, x: torch.Tensor):
-        B,L,_ = x.size()
-        x = x.view(-1, 3, 224, 224)
+        B,L,H,W,C = x.size()
+        x = x.view(-1, C, H, W)
         x = self.resnet.conv1(x)
         x = self.resnet.bn1(x)
         x = self.resnet.relu(x)
@@ -28,7 +32,7 @@ class ImgEmbedder(nn.Module):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
-        x = torch.reshape(x,(B,L,768))
+        x = x.view(B, L, -1)
 
         return x
 
@@ -54,7 +58,7 @@ class MultiModalEmbedding(nn.Module):
     position and token_type embeddings.
     input_ids (batch_size, sequence_length),
     with [1, sequence_length_1 + 1] filled with [VID]
-    video_features (batch_size, sequence_length),
+    video_feats (batch_size, sequence_length),
     with [1, sequence_length_1 + 1] as real features, others as zeros
     ==> video features and word embeddings are merged together by summing up.
     """
