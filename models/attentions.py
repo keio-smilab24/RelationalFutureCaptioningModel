@@ -6,7 +6,7 @@ import torch.nn as nn
 from models.misc import SelfOutput
 
 
-class Attention(nn.Module):
+class MHSA(nn.Module):
     """
     TransformerにおけるMHA
     """

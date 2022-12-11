@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from models.attentions import Attention
+from models.attentions import MHSA
 from models.misc import FeedforwardNeuralNetModel, make_pad_shifted_mask
 
 
@@ -10,7 +10,7 @@ class DecoderLayer(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.attention = Attention(cfg)
+        self.attention = MHSA(cfg)
         self.output = TrmFeedForward(cfg)
         self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
         self.rand = torch.randn(1, requires_grad=True).cuda()
@@ -58,6 +58,8 @@ class TransformerDecoder(nn.Module):
             output_all_encoded_layers:
         Returns:
         """
+        # TODO :
+        # こいつら使っていい
         query_clip = torch.zeros(hidden_states.shape).cuda()
         query_clip = query_clip + clip_his
         all_decoder_layers = []
