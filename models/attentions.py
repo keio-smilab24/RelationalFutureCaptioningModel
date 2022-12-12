@@ -17,7 +17,7 @@ class MHSA(nn.Module):
         self.output = SelfOutput(cfg)
         self.layernorm = nn.LayerNorm(cfg.hidden_size)
 
-    def forward(self, x, attention_mask=None, clip_his=None):
+    def forward(self, x, attention_mask=None, source_kv=None):
         """
         Args:
             input_tensor: (N, L, D)
@@ -25,8 +25,10 @@ class MHSA(nn.Module):
         Returns:
         """
         # x = self.layernorm(x)
-        if clip_his is not None:
-            self_output = self.self(clip_his, x, x, attention_mask)
+        # x, clip_his, clip_hisかなと
+        if source_kv is not None:
+            self_output = self.self(source_kv, x, x, attention_mask)
+            # self_output = self.self(x, source_kv, source_kv, attention_mask)
         else:
             self_output = self.self(x, x, x, attention_mask)
         att = self.output(self_output, x)

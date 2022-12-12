@@ -68,6 +68,7 @@ num_hidden_layers: 2
 n_memory_cells: 1
 share_wd_cls_weight: false
 fix_resnet: false
+cross_attention_layers: 2
 # ---------- Optimization ----------
 ema_decay: 0.9999
 initializer_range: 0.02

@@ -4,11 +4,12 @@ import torch
 from torch import nn
 
 from losses.loss import LabelSmoothingLoss
+from models.attentions import MHSA
 from utils.utils import count_parameters
 from losses.loss import CLIPloss
 from utils.configs import Config
 from models.embedder import ImgEmbedder, MultiModalEmbedding, ConvNeXtEmbedder
-from models.encoder import RSAEncoder, TransformerEncoder
+from models.encoder import RSAEncoder, TransformerEncoder, CrossAttentionEncoder
 from models.decoder import TransformerDecoder, PredictionHead
 from models.cnn import CNN
 
@@ -35,6 +36,7 @@ class RecursiveTransformer(nn.Module):
         self.txt_embedder = nn.Linear(cfg.clip_dim, cfg.clip_dim)
         self.img_embedder = ImgEmbedder(cfg.fix_resnet)
         self.embeddings = MultiModalEmbedding(cfg, add_postion_embeddings=True)
+        self.CrossAttention = CrossAttention(cfg)
         self.RSAEncoder = RSAEncoder(cfg)
         self.TextEncoder = TransformerEncoder(cfg)
         
@@ -96,7 +98,15 @@ class RecursiveTransformer(nn.Module):
         """
         # 特徴抽出
         txt_feats = self.txt_embedder(txt_feats)
-        img_feats = self.img_embedder(img_feats) # (B,Lv,H,W,C) -> (B,Lv,D)
+        # for CLS and BOS
+        im_token_feats = torch.cat((img_feats[:,0:1,:], img_feats[:,-1:,:]), dim=1) #(B,2,H,W,C)
+        im_token_feats = self.img_embedder(im_token_feats) # (B,2,H,W,C) -> (B,2,D)
+        # cross Attention
+        img_feats = img_feats[:,1:self.cfg.max_v_len-1,:]
+        img_feats = self.CrossAttention(img_feats) # (B, Lv, D)
+        # img feats cat
+        img_feats = torch.cat(
+            (im_token_feats[:,0:1,:], img_feats, im_token_feats[:,-1:,:]), dim=1)
 
         # cat: (B,Lv,D) + (B,Lt,D) -> (B,Lv+Lt,D)
         features = torch.cat((img_feats, txt_feats), dim=1)
@@ -211,6 +221,44 @@ class RecursiveTransformer(nn.Module):
         caption_loss /= step_size
         return caption_loss, prediction_scores_list, snt_loss, rec_loss, clip_loss
 
+class CrossAttention(nn.Module):
+    """
+    Summary:
+        calc attention between camera rgbd and taregt rgbd
+    """
+    def __init__(self, cfg):
+        super().__init__()
+        self.cfg = cfg
+
+        self.camera_embedder = ImgEmbedder(cfg.fix_resnet)
+        self.target_embedder = ImgEmbedder(cfg.fix_resnet)
+
+        self.camera_encoder = CrossAttentionEncoder(cfg)
+        self.target_encoder = CrossAttentionEncoder(cfg)
+
+    def forward(self, img_feats: torch.Tensor):
+        """
+        Args:
+            img_feats(torch.Tensor): (B, 6(4), H, W, C)
+            if max_v_len==8 4 else 2
+        """
+        if self.cfg.max_v_len == 6:
+            camera_feats = img_feats[:,0:2,:].contiguous() # (B, 2, H, W, C)
+            target_feats = img_feats[:,2:4,:].contiguous() # (B, 2, H, W, C)
+        else:
+            camera_feats = torch.cat((img_feats[:,0:2,:], img_feats[:,4:6,:]), dim=1).contiguous() #(B,4,H,W,C)
+            target_feats = img_feats[:,2:6,:].contiguous() #(B,4,H,W,C)
+
+        camera_feats = self.camera_embedder(camera_feats) # (B, 2or4, D)
+        target_feats = self.target_embedder(target_feats) # (B, 2or4, D)
+
+        camera_feats = self.camera_encoder(hidden_states=camera_feats, source_kv=target_feats) #(B,4(2),D)
+        target_feats = self.target_encoder(hidden_states=target_feats, source_kv=camera_feats) #(B,4(2),D)
+
+        # concat
+        img_feats = torch.cat((camera_feats, target_feats[:,:2,:]), dim=1) #(B, 6(4), D)
+
+        return img_feats
 
 def create_model(
     cfg: Config,

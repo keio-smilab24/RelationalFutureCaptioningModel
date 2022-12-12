@@ -79,12 +79,62 @@ class TrmEncLayer(nn.Module):
         # x = self.output(x, x)  # (N, L, D)
         return x
 
+class CrossAttentionEncoder(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.layer = nn.ModuleList(
+            [CAEncoderLayer(cfg) for _ in range(cfg.cross_attention_layers)]
+        )
+
+    def forward(
+        self,
+        hidden_states,
+        source_kv,
+        attention_mask=None,
+        ):
+        """
+        Args:
+            prev_ms: [(N, M, D), ] * num_hidden_layers or None at first step.
+            Memory states for each layer
+            hidden_states: (N, L, D)
+            attention_mask: (N, L)
+            output_all_encoded_layers:
+        Returns:
+        """
+        for _, layer_module in enumerate(self.layer):
+            hidden_states = layer_module(hidden_states, source_kv, attention_mask)
+        return hidden_states
+
+class CAEncoderLayer(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.cfg = cfg
+
+        self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
+        self.mha = MHSA(cfg)
+        self.rand = torch.randn(1, requires_grad=True).cuda()
+        self.linear = Intermediate(cfg)
+        self.rand_z = torch.randn(1, requires_grad=True).cuda()
+    
+    def forward(self, x:torch.Tensor, source_kv:torch.Tensor, attention_mask=None):
+        identity_x = x.clone().cuda()
+        x = self.LayerNorm(x)
+        x = self.mha(x=x, source_kv=source_kv)
+        x = self.rand*identity_x + (1-self.rand)*x
+        identity_x = x.clone().cuda()
+        x = self.LayerNorm(x)
+        output = self.linear(x)
+        output = self.rand_z*identity_x + (1-self.rand_z)*output
+
+        return output
+
+
 
 class TransformerEncoder(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.layer = nn.ModuleList(
-            [LayerWoMemory(cfg) for _ in range(cfg.num_hidden_layers)]
+            [EncoderLayer(cfg) for _ in range(cfg.num_hidden_layers)]
         )
 
     def forward(
@@ -111,7 +161,7 @@ class TransformerEncoder(nn.Module):
             all_encoder_layers.append(hidden_states)
         return all_encoder_layers
 
-class LayerWoMemory(nn.Module):
+class EncoderLayer(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg

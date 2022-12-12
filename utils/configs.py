@@ -151,6 +151,7 @@ class Config(ConfigClass):
         self.n_memory_cells: int = config.pop("n_memory_cells")
         self.share_wd_cls_weight: bool = config.pop("share_wd_cls_weight")
         self.fix_resnet: bool = config.pop("fix_resnet")
+        self.cross_attention_layers: int = config.pop("cross_attention_layers")
 
         # optimization
         self.ema_decay: float = config.pop("ema_decay")
