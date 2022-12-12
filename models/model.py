@@ -34,7 +34,6 @@ class RecursiveTransformer(nn.Module):
         self.cfg.vocab_size = vocab_size
 
         self.txt_embedder = nn.Linear(cfg.clip_dim, cfg.clip_dim)
-        self.img_embedder = ImgEmbedder(cfg.fix_resnet)
         self.embeddings = MultiModalEmbedding(cfg, add_postion_embeddings=True)
         self.CrossAttention = CrossAttention(cfg)
         self.RSAEncoder = RSAEncoder(cfg)
@@ -98,15 +97,14 @@ class RecursiveTransformer(nn.Module):
         """
         # 特徴抽出
         txt_feats = self.txt_embedder(txt_feats)
-        # for CLS and BOS
-        im_token_feats = torch.cat((img_feats[:,0:1,:], img_feats[:,-1:,:]), dim=1) #(B,2,H,W,C)
-        im_token_feats = self.img_embedder(im_token_feats) # (B,2,H,W,C) -> (B,2,D)
         # cross Attention
-        img_feats = img_feats[:,1:self.cfg.max_v_len-1,:]
         img_feats = self.CrossAttention(img_feats) # (B, Lv, D)
+        # CLS and BOS token
+        B,_,D = img_feats.shape
+        cls_token = torch.zeros((B,1,D), requires_grad=True).cuda()
+        bos_token = torch.zeros((B,1,D), requires_grad=True).cuda()
         # img feats cat
-        img_feats = torch.cat(
-            (im_token_feats[:,0:1,:], img_feats, im_token_feats[:,-1:,:]), dim=1)
+        img_feats = torch.cat((cls_token, img_feats, bos_token), dim=1)
 
         # cat: (B,Lv,D) + (B,Lt,D) -> (B,Lv+Lt,D)
         features = torch.cat((img_feats, txt_feats), dim=1)

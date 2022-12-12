@@ -420,10 +420,11 @@ class BilaDataset(data.Dataset):
         mask = [1] * self.max_v_len
         
         # img / text の特徴量を作成
-        img_feats = np.zeros((self.max_v_len, *img_list[0].shape))
+        img_feats = np.zeros((self.max_v_len-2, *img_list[0].shape))
         txt_feats = np.zeros((self.max_t_len, self.clip_dim))
+
         for idx in range(len(img_list)):
-            img_feats[idx+1] = img_list[idx]
+            img_feats[idx] = img_list[idx]
 
         return img_feats, txt_feats, video_tokens, mask
 
