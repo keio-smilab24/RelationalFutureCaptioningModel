@@ -566,12 +566,13 @@ class BilaDataset(data.Dataset):
         return collated_step_batch, raw_step_sizes, batch_meta
 
 
-def pad_tensors(inputs, lens=None, pad=0):
+def pad_tensors(key, inputs, lens=None, pad=0):
     """
     Args:
-        tensors: 
-        lens   :
-        pad    :
+        keys   : bboxed or bbox_feats
+        tensors: batch中のデータ
+        lens   : length
+        pad    : pad(int)
     B x [T, ...]
     """
     # 最大数を計算
@@ -588,7 +589,16 @@ def pad_tensors(inputs, lens=None, pad=0):
         output.data.fill_(pad)
     for i, (t, l) in enumerate(zip(inputs, lens)):
         output[i, :l, :] = t.data
-    return torch.from_numpy(output)
+    
+    if key == "bbox_feats":
+        return torch.from_numpy(output)
+
+    # 面積情報の追加
+    # obstacle_position_feature = torch.cat([bbox, bbox[:, 4:5] * bbox[:, 5:]], dim=-1)
+    if key == "bboxes":
+        output = torch.from_numpy(output)
+        output = torch.cat([output, output[:,:,4:5]*output[:,:,5:]], dim=-1)
+        return output
 
 
 def prepare_batch_inputs(batch, use_cuda: bool, non_blocking=False):
@@ -616,7 +626,7 @@ def step_collate(padded_batch_step):
         if isinstance(value, list):
             c_batch[key] = [d[key] for d in padded_batch_step]
         elif key in ["bboxes", "bbox_feats"]:
-            c_batch[key] = pad_tensors([d[key] for d in padded_batch_step])
+            c_batch[key] = pad_tensors(key, [d[key] for d in padded_batch_step])
         else:
             c_batch[key] = default_collate([d[key] for d in padded_batch_step])
     return c_batch

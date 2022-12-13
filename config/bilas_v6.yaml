@@ -73,7 +73,7 @@ cross_attention_layers: 2
 uniter_hidden_size: 768
 uniter_hidden_dropout_prob: 0.1
 uniter_img_dim: 1024
-uniter_pos_dim: 6
+uniter_pos_dim: 7
 # ---------- Optimization ----------
 ema_decay: 0.9999
 initializer_range: 0.02
