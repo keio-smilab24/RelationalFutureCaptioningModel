@@ -39,7 +39,7 @@ import pandas as pd
     # pip install unidic-lite==1.0.8
 
 実行コマンド
-    python preprocess/do_all_preprocess.py --useSet 3 4 --save_csv_set --save_all_csv --save_all_json --save_mecab_json --save_split_json --save_caption_json
+    python preprocess/do_all_preprocess.py --useSet 3 4 --delete_two_text --save_csv_set --att_type over --save_all_csv --save_all_json --save_mecab_json --seed 42 --save_split_json --save_caption_json --calc_max_t_len --top_k 10
 """
 
 @classopt(default_long=True)
