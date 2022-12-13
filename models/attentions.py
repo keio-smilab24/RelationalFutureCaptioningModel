@@ -6,7 +6,7 @@ import torch.nn as nn
 from models.misc import SelfOutput
 
 
-class MHSA(nn.Module):
+class MultiHeadAttention(nn.Module):
     """
     TransformerにおけるMHA
     """
@@ -24,11 +24,10 @@ class MHSA(nn.Module):
             attention_mask: (N, Lq, L)
         Returns:
         """
-        # x = self.layernorm(x)
-        # x, clip_his, clip_hisかなと
         if source_kv is not None:
-            self_output = self.self(source_kv, x, x, attention_mask)
-            # self_output = self.self(x, source_kv, source_kv, attention_mask)
+            # self_output = self.self(source_kv, x, x, attention_mask) #(16,63,768)
+            self_output = self.self(x, source_kv, source_kv, attention_mask)
+            # att = self.output(self.output, x)
         else:
             self_output = self.self(x, x, x, attention_mask)
         att = self.output(self_output, x)
@@ -79,23 +78,26 @@ class SelfAttention(nn.Module):
         # (last dim) is applied, as another dim (second last)
         # will be ignored in future computation anyway
         if attention_mask is not None:
-            attention_mask = (
-                1 - attention_mask.unsqueeze(1)
-            ) * -10000.0  # (N, 1, Lq, L)
+            attention_mask = \
+                (1 - attention_mask.unsqueeze(1)) * -10000.0  # (N, 1, Lq, L)
+        
         mixed_query_layer = self.query_w(query)
         mixed_key_layer = self.key_w(key)
         mixed_value_layer = self.value_w(value)
+
         query_layer = self.transpose_for_scores(mixed_query_layer)  # (N, nh, Lq, dh)
         key_layer = self.transpose_for_scores(mixed_key_layer)  # (N, nh, L, dh)
         value_layer = self.transpose_for_scores(mixed_value_layer)  # (N, nh, L, dh)
-        # Take the dot product between "query" and "key"
-        # to get the raw attention scores.
+        
+        # calc attention
         att_w = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # (N, nh, Lq, L)
         att_w = att_w / math.sqrt(self.attention_head_size)
+        
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers
             # in BertModel forward() function)
             att_w = att_w + attention_mask
+        
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(att_w)
         # This is actually dropping out entire tokens to attend to, which might

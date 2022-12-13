@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from losses.loss import LabelSmoothingLoss
-from models.attentions import MHSA
+from models.attentions import MultiHeadAttention
 from utils.utils import count_parameters
 from losses.loss import CLIPloss
 from utils.configs import Config
@@ -101,8 +101,8 @@ class RecursiveTransformer(nn.Module):
         img_feats = self.CrossAttention(img_feats) # (B, Lv, D)
         # CLS and BOS token
         B,_,D = img_feats.shape
-        cls_token = torch.zeros((B,1,D), requires_grad=True).cuda()
-        bos_token = torch.zeros((B,1,D), requires_grad=True).cuda()
+        cls_token = torch.zeros((B,1,D)).cuda()
+        bos_token = torch.zeros((B,1,D)).cuda()
         # img feats cat
         img_feats = torch.cat((cls_token, img_feats, bos_token), dim=1)
 
@@ -115,13 +115,15 @@ class RecursiveTransformer(nn.Module):
         img_feats = features[:,1:self.cfg.max_v_len-1,:].clone()
 
         # Time Series Module
-        _, img_feats = self.RSAEncoder(img_feats)
+        img_feats, _  = self.RSAEncoder(img_feats)
 
         embeddings = self.embeddings(input_ids, features, token_type_ids)
         
         encoded_layer_outputs = self.TextEncoder(
             embeddings, input_masks, output_all_encoded_layers=False
         )
+        # encoded_layer_ouputs[-1]: (16,63,768)
+        # img_feats: (16,1,768)
         decoded_layer_outputs = self.transformerdecoder(
             encoded_layer_outputs[-1], input_masks, img_feats
         )

@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from models.embedder import PositionEncoding
-from models.attentions import MultiHeadRSA, MHSA
+from models.attentions import MultiHeadRSA, MultiHeadAttention
 from models.misc import FeedforwardNeuralNetModel, make_pad_shifted_mask, Intermediate
 
 
@@ -111,7 +111,7 @@ class CAEncoderLayer(nn.Module):
         self.cfg = cfg
 
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        self.mha = MHSA(cfg)
+        self.mha = MultiHeadAttention(cfg)
         self.rand = torch.randn(1, requires_grad=True).cuda()
         self.linear = Intermediate(cfg)
         self.rand_z = torch.randn(1, requires_grad=True).cuda()
@@ -172,7 +172,7 @@ class EncoderLayer(nn.Module):
         # self.mmha = Attention(cfg)
         # self.mha = Attention(cfg)
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        self.attention = MHSA(cfg)
+        self.attention = MultiHeadAttention(cfg)
         self.rand = torch.randn(1, requires_grad=True).cuda()
         self.hidden_intermediate = Intermediate(cfg)
         self.rand_z = torch.randn(1, requires_grad=True).cuda()
