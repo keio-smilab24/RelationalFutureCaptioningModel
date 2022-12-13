@@ -69,6 +69,11 @@ n_memory_cells: 1
 share_wd_cls_weight: false
 fix_resnet: false
 cross_attention_layers: 2
+# ---------- Uniter ----------------
+uniter_hidden_size: 768
+uniter_hidden_dropout_prob: 0.1
+uniter_img_dim: 1024
+uniter_pos_dim: 6
 # ---------- Optimization ----------
 ema_decay: 0.9999
 initializer_range: 0.02

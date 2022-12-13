@@ -3,6 +3,7 @@ Captioning dataset.
 """
 import copy
 import json
+import csv
 import os
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -232,6 +233,51 @@ class BilaDataset(data.Dataset):
         items, meta = self.convert_example_to_features(self.data[index])
         return items, meta
 
+    def _load_bbox_feats(self, raw_name: str):
+        if self.datatype == 'bilas':
+            # N_XXX -> N / XXX
+            setNum = raw_name.split('_')[0]
+            scene  = int(raw_name.split('_')[-1])
+
+            data_dir = os.path.join("data", "Ponnet", f"S-set{setNum}")
+
+            bbox_file_path = os.path.join(data_dir, "csv_bbox", f'{scene:04}_rgb_bbox.csv')
+            bbox_feat_path = os.path.join(data_dir, "csv_feature", f'{scene:04}_rgb_features.csv')
+
+            bbox_list = self._load_from_csv(bbox_file_path)
+            bbox_feats_list = self._load_from_csv(bbox_feat_path)
+
+            # 検出したbboxの数を計算
+            num_bb = len(bbox_feats_list)
+
+            # bboxが0個の場合空の値で補間
+            if num_bb == 0:
+                # frcnnの次元: 1024
+                bbox_feats_list = [[0]*1024 for _ in range(1)]
+                bbox_list = [[0]*6 for _ in range(1)]
+
+            bboxes = np.asarray(bbox_list)
+            bbox_feats = np.asarray(bbox_feats_list)
+        
+        return bboxes, bbox_feats
+    
+    def _load_from_csv(self, file_path: str):
+        """
+        Summary:
+            csvファイルからデータを読み込む
+        Args:
+            file_path: ファイルパス
+        Return:
+            データが格納されたリスト
+        """
+        outputs = []
+        with open(file_path) as f:
+            csv_reader = csv.reader(f)
+            for row_str in csv_reader:
+                row_float = [float(s) for s in row_str]
+                outputs.append(row_float)
+        return outputs
+
     def _load_ponnet_img_feature(
         self,
         raw_name: str,
@@ -320,6 +366,8 @@ class BilaDataset(data.Dataset):
         raw_name = example["clip_id"] # clip_id : VideoID/SceneID
         img_list, rec_img = self._load_ponnet_img_feature(raw_name)
         
+        bboxes, bbox_feats = self._load_bbox_feats(raw_name)
+
         single_features = []
         single_meta = []
         
@@ -329,6 +377,8 @@ class BilaDataset(data.Dataset):
             example["sentence"],
             rec_img,
             img_list,
+            bboxes,
+            bbox_feats,
         )
         
         single_features.append(data)
@@ -342,6 +392,8 @@ class BilaDataset(data.Dataset):
         sentence,
         gt_rec,
         img_list,
+        bboxes,
+        bbox_feats,
     ):
         """
         make features for a single clip-sentence pair.
@@ -390,6 +442,8 @@ class BilaDataset(data.Dataset):
             img_feats=img_feats.astype(np.float32),
             txt_feats=txt_feats.astype(np.float32),
             gt_rec = gt_rec,
+            bboxes=bboxes.astype(np.float32),
+            bbox_feats=bbox_feats.astype(np.float32),
         )
         meta = dict(name=name, sentence=sentence)
         
@@ -474,16 +528,10 @@ class BilaDataset(data.Dataset):
 
     def collate_fn(self, batch):
         """
-        Args:
-            batch:
-        Returns:
+        datasetの出力
+            [items, meta] = [[data{}], [meta{}]] = dataset[batch_idx]
         """
-        # recurrent collate function. original docstring:
-        # HOW to batch clip-sentence pair? 1) directly copy the last
-        # sentence, but do not count them in when
-        # back-prop OR put all -1 to their text token label, treat
-
-        # collect meta
+        # meta側
         raw_batch_meta = [e[1] for e in batch]
         batch_meta = []
         for e in raw_batch_meta:
@@ -493,18 +541,16 @@ class BilaDataset(data.Dataset):
                 cur_meta["gt_sentence"].append(d["sentence"])
             batch_meta.append(cur_meta)
 
+        # items側
         batch = [e[0] for e in batch]
         # Step1: pad each example to max_n_sen
-        max_n_sen = max([len(e) for e in batch])
+        max_n_sen = max([len(e) for e in batch]) # 1
+        
         raw_step_sizes = []
-
         padded_batch = []
-        padding_clip_sen_data = copy.deepcopy(
-            batch[0][0]
-        )  # doesn"t matter which one is used
-        padding_clip_sen_data["input_labels"][:] =\
-            BilaDataset.IGNORE
-        for ele in batch:
+        padding_clip_sen_data = copy.deepcopy(batch[0][0]) # doesn"t matter which one is used
+        padding_clip_sen_data["input_labels"][:] = BilaDataset.IGNORE
+        for ele in batch: # [data{}] (length 1)
             cur_n_sen = len(ele)
             if cur_n_sen < max_n_sen:
                 # noinspection PyAugmentAssignment
@@ -518,6 +564,31 @@ class BilaDataset(data.Dataset):
             collated_step = step_collate([e[step_idx] for e in padded_batch])
             collated_step_batch.append(collated_step)
         return collated_step_batch, raw_step_sizes, batch_meta
+
+
+def pad_tensors(inputs, lens=None, pad=0):
+    """
+    Args:
+        tensors: 
+        lens   :
+        pad    :
+    B x [T, ...]
+    """
+    # 最大数を計算
+    if lens is None:
+        lens = [e.shape[0] for e in inputs]
+    max_len = max(lens)
+    # batch_size
+    bs = len(inputs)
+    # 配列の作成
+    dim = inputs[0].shape[-1]
+    dtype = inputs[0].dtype
+    output = np.zeros((bs, max_len, dim), dtype=dtype)
+    if pad:
+        output.data.fill_(pad)
+    for i, (t, l) in enumerate(zip(inputs, lens)):
+        output[i, :l, :] = t.data
+    return torch.from_numpy(output)
 
 
 def prepare_batch_inputs(batch, use_cuda: bool, non_blocking=False):
@@ -544,6 +615,8 @@ def step_collate(padded_batch_step):
         value = padded_batch_step[0][key]
         if isinstance(value, list):
             c_batch[key] = [d[key] for d in padded_batch_step]
+        elif key in ["bboxes", "bbox_feats"]:
+            c_batch[key] = pad_tensors([d[key] for d in padded_batch_step])
         else:
             c_batch[key] = default_collate([d[key] for d in padded_batch_step])
     return c_batch

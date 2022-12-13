@@ -153,6 +153,12 @@ class Config(ConfigClass):
         self.fix_resnet: bool = config.pop("fix_resnet")
         self.cross_attention_layers: int = config.pop("cross_attention_layers")
 
+        # uniter
+        self.uniter_hidden_size: int = config.pop('uniter_hidden_size')
+        self.uniter_hidden_dropout_prob: float = config.pop('uniter_hidden_dropout_prob')
+        self.uniter_img_dim: int = config.pop('uniter_img_dim')
+        self.uniter_pos_dim: int = config.pop("uniter_pos_dim")
+
         # optimization
         self.ema_decay: float = config.pop("ema_decay")
         self.initializer_range: float = config.pop("initializer_range")
