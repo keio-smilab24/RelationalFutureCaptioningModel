@@ -69,7 +69,7 @@ class CLIPEmbedder(nn.Module):
         # available models:
         # ['RN50', 'RN101', 'RN50x4', 'RN50x16', 'RN50x64',
         # 'ViT-B/32', 'ViT-B/16', 'ViT-L/14', 'ViT-L/14@336px']
-        self.clip_img_encoder = clip.load("ViT-B/32", device="cuda")
+        self.clip_img_encoder, preprocess = clip.load("ViT-B/32", device="cuda")
         self.linear = nn.Linear(512, cfg.clip_dim)
         self.ln = nn.LayerNorm(cfg.clip_dim)
 
@@ -78,8 +78,8 @@ class CLIPEmbedder(nn.Module):
                 params.requires_grad = False
     
     def forward(self, x:torch.Tensor):
-        B,L,C,H,W, = x.shape
-        x = x.view(B*L,H,W,C)
+        B,L,H,W,C = x.shape
+        x = x.view(B*L,C,H,W)
         x = self.clip_img_encoder.encode_image(x).float()
         x = self.linear(x)
         x = self.ln(x)

@@ -341,7 +341,7 @@ class Trainer:
         
         self.use_wandb = use_wandb
         if use_wandb:
-            wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}_change_img_embedder"
+            wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}_clip_emb_no_fix"
             wandb.init(name=wandb_name, project="BilaS")
         
         # set start epoch and time & show log
