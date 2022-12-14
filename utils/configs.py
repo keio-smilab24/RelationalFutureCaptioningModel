@@ -147,8 +147,9 @@ class Config(ConfigClass):
         self.num_hidden_layers: int = config.pop("num_hidden_layers")
         self.n_memory_cells: int = config.pop("n_memory_cells")
         self.share_wd_cls_weight: bool = config.pop("share_wd_cls_weight")
-        self.fix_resnet: bool = config.pop("fix_resnet")
+        self.fix_emb: bool = config.pop("fix_emb")
         self.cross_attention_layers: int = config.pop("cross_attention_layers")
+        self.ca_embedder: str = config.pop("ca_embedder")
 
         # uniter
         self.uniter_hidden_size: int = config.pop('uniter_hidden_size')

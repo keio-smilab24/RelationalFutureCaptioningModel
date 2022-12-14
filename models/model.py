@@ -7,7 +7,7 @@ from losses.loss import LabelSmoothingLoss
 from utils.utils import count_parameters
 from losses.loss import CLIPloss
 from utils.configs import Config
-from models.embedder import ImgEmbedder, MultiModalEmbedding, ConvNeXtEmbedder
+from models.embedder import ResEmbedder, MultiModalEmbedding, ConvNeXtEmbedder, BaseEmbedder, CLIPEmbedder
 from models.encoder import RSAEncoder, TransformerEncoder, CrossAttentionEncoder
 from models.decoder import TransformerDecoder, PredictionHead
 from models.uniter import UniterImageEmbeddings
@@ -155,7 +155,6 @@ class RecursiveTransformer(nn.Module):
         """
         Args:
             input_ids_list: [(N, L)] * step_size
-            TODO :
             input_masks_list: [(N, L)] * step_size with 1 indicates valid bits
             token_type_ids_list: [(N, L)] * step_size, with `0` on the first `max_v_len` bits,
                 `1` on the last `max_t_len`
@@ -206,34 +205,19 @@ class RecursiveTransformer(nn.Module):
         # compute loss, get predicted words
         caption_loss = 0.0
         for idx in range(step_size):
-            snt_loss = self.loss_func(
+            loss_CE = self.loss_func(
                 prediction_scores_list[idx].view(-1, self.cfg.vocab_size),
                 input_labels_list[idx].view(-1),
             )
-            """
-            # TODO : 確認 ここの7という値はなに
-            """
-            gt_action_list = input_labels_list[idx][:, 7]
-            act_score_list = action_score[idx].cpu()
-            iwp_loss = 0.0
-            for actidx in range(len(gt_action_list)):
-                gt_action = torch.tensor([gt_action_list[actidx]], dtype=int)
-                gt_idx = gt_action.tolist()
-                if gt_idx[0] == -1:
-                    continue
-                if gt_idx[0] in ACTION_WEIGHT:
-                    iwp_loss += (1 / ACTION_WEIGHT[gt_idx[0]]) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
-                else:
-                    iwp_loss += (1 / 300) * self.actionloss_func(act_score_list[actidx].view(-1, self.cfg.vocab_size), gt_action)
             clip_loss = 0.0
-
             clip_loss += self.cliploss(pred_reconst[idx], encoded_outputs_list[idx][0][:, self.cfg.max_v_len:, :])
             if gt_rec is not None:
                 rec_loss = self.rec_loss(pred_reconst[idx].reshape(-1, 16, 16, 3), gt_reconst[idx] / 255.)
 
-            caption_loss += 15 * snt_loss + 500 * rec_loss + 4 * clip_loss + iwp_loss / 100
+            # caption_loss += 15 * snt_loss + 500 * rec_loss + 4 * clip_loss
+            caption_loss += 15 * loss_CE + 4 * clip_loss
         caption_loss /= step_size
-        return caption_loss, prediction_scores_list, snt_loss, rec_loss, clip_loss
+        return caption_loss, prediction_scores_list, loss_CE, rec_loss, clip_loss
 
 class CrossAttention(nn.Module):
     """
@@ -244,8 +228,18 @@ class CrossAttention(nn.Module):
         super().__init__()
         self.cfg = cfg
 
-        self.camera_embedder = ImgEmbedder(cfg.fix_resnet)
-        self.target_embedder = ImgEmbedder(cfg.fix_resnet)
+        if cfg.ca_embedder == "Base":
+            self.camera_embedder = BaseEmbedder(cfg)
+            self.target_embedder = BaseEmbedder(cfg)
+        elif cfg.ca_embedder == "CLIP":
+            self.camera_embedder = CLIPEmbedder(cfg)
+            self.target_embedder = CLIPEmbedder(cfg)
+        elif cfg.ca_embedder == "Res":
+            self.camera_embedder = ResEmbedder(cfg)
+            self.target_embedder = ResEmbedder(cfg)
+        elif cfg.ca_embedder == "ConvNeXt":
+            self.camera_embedder = ConvNeXtEmbedder()
+            self.target_embedder = ConvNeXtEmbedder()
 
         self.camera_encoder = CrossAttentionEncoder(cfg)
         self.target_encoder = CrossAttentionEncoder(cfg)

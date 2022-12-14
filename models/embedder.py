@@ -3,13 +3,15 @@ import math
 import torch
 from torch import nn
 import torchvision.models as models
+import clip
 
 from models.cnn import ConvNeXt
 
+class BaseEmbedder(nn.Module):
+    def __init__(self, cfg):
+        super(BaseEmbedder, self).__init__()
 
-class ImgEmbedder(nn.Module):
-    def __init__(self, fix_resnet: bool=False):
-        super(ImgEmbedder, self).__init__()
+        self.cfg = cfg
 
         self.resnet = models.resnet50(pretrained=True)
         self.fc1 = nn.Linear(1024, 768)
@@ -17,7 +19,7 @@ class ImgEmbedder(nn.Module):
         self.conv2 = nn.Conv2d(456, 512, 5, stride=3)
         self.conv3 = nn.Conv2d(512, 768, 8, stride=1)
 
-        if fix_resnet:
+        if cfg.fix_emb:
             for params in self.resnet.parameters():
                 params.requires_grad = False
 
@@ -36,6 +38,53 @@ class ImgEmbedder(nn.Module):
 
         return x
 
+class ResEmbedder(nn.Module):
+    def __init__(self, cfg):
+        super(ResEmbedder, self).__init__()
+
+        self.cfg = cfg
+
+        self.resnet = models.resnet50(pretrained=True)
+        self.linear = nn.Linear(1000, cfg.clip_dim)
+
+        if cfg.fix_emb:
+            for params in self.resnet.parameters():
+                params.requires_grad = False
+
+    def forward(self, x: torch.Tensor):
+        B,L,H,W,C = x.size()
+        x = x.view(-1, C, H, W)
+        x = self.resnet(x)
+        x = self.linear(x)
+        x = x.view(B, L, -1)
+
+        return x
+
+class CLIPEmbedder(nn.Module):
+    def __init__(self, cfg):
+        super(CLIPEmbedder, self).__init__()
+
+        self.cfg = cfg
+
+        # available models:
+        # ['RN50', 'RN101', 'RN50x4', 'RN50x16', 'RN50x64',
+        # 'ViT-B/32', 'ViT-B/16', 'ViT-L/14', 'ViT-L/14@336px']
+        self.clip_img_encoder = clip.load("ViT-B/32", device="cuda")
+        self.linear = nn.Linear(512, cfg.clip_dim)
+        self.ln = nn.LayerNorm(cfg.clip_dim)
+
+        if cfg.fix_emb:
+            for params in self.clip_img_encoder.parameters():
+                params.requires_grad = False
+    
+    def forward(self, x:torch.Tensor):
+        B,L,C,H,W, = x.shape
+        x = x.view(B*L,H,W,C)
+        x = self.clip_img_encoder.encode_image(x).float()
+        x = self.linear(x)
+        x = self.ln(x)
+        x = x.view(B, L, -1)
+        return x
 
 class ConvNeXtEmbedder(nn.Module):
     def __init__(self):
