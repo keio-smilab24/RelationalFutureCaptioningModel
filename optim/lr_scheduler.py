@@ -13,47 +13,13 @@ Private: InvSqRootWithWarmup, PolynomialLR, SGDWarmRestarts
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from torch.optim.optimizer import Optimizer
 
 from utils import baseconfig, utils
 from utils.baseconfig import ConfigClass
 
-
-def make_lr_scheduler(optimizer: Optimizer, cfg: SchedulerConfig, base_lr: float, num_epochs: int,
-                      train_loader_length: int, logger: Optional[logging.Logger] = None) -> LRScheduler:
-    """
-    Create LR scheduler.
-
-    Args:
-
-        optimizer: Optimizer.
-        cfg: Scheduler config.
-        base_lr: Optimizer base LR.
-        train_loader_length: Total number of steps per train epoch.
-        num_epochs: Planned total number of epochs.
-        logger: Logger to print LR scheduler infos to.
-
-    Returns:
-        LR Scheduler.
-    """
-    if logger is None:
-        logger = logging.getLogger(utils.LOGGER_NAME)
-    logger.info(f"LR Scheduler: {cfg.name} LR {base_lr} Epochs {num_epochs} "
-                f"steps per epoch {train_loader_length}")
-
-    # create scheduler
-    if cfg.name == SchedulerConst.REDUCE_OPW:
-        lr_sched: LRScheduler = NewROPWarmup(optimizer, base_lr, cfg, num_epochs, train_loader_length, logger)
-    elif cfg.name == SchedulerConst.NONE:
-        lr_sched = ConstantLR(optimizer, base_lr, cfg, num_epochs, train_loader_length, logger)
-    else:
-        raise ValueError(f"LR Scheduler unknown: {cfg.name}")
-    return lr_sched
-
-
-# ---------- Configuration ----------
 
 class SchedulerConfig(ConfigClass):
     """

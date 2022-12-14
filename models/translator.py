@@ -202,6 +202,7 @@ class Translator(object):
             bboxes_list,
             bbox_feats_list,
         ) = model_inputs
+        
         return self.translate_batch_greedy(
             input_ids_list,
             img_feats_list,

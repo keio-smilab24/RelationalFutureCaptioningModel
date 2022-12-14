@@ -4,14 +4,12 @@ import torch
 from torch import nn
 
 from losses.loss import LabelSmoothingLoss
-from models.attentions import MultiHeadAttention
 from utils.utils import count_parameters
 from losses.loss import CLIPloss
 from utils.configs import Config
 from models.embedder import ImgEmbedder, MultiModalEmbedding, ConvNeXtEmbedder
 from models.encoder import RSAEncoder, TransformerEncoder, CrossAttentionEncoder
 from models.decoder import TransformerDecoder, PredictionHead
-from models.cnn import CNN
 from models.uniter import UniterImageEmbeddings
 
 
@@ -33,43 +31,44 @@ class RecursiveTransformer(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.cfg.vocab_size = vocab_size
+        self.idx = 0
 
         # feats for object detection
         self.uniter_embedding = UniterImageEmbeddings(cfg, cfg.uniter_img_dim)
 
+        # feats for img and txt
         self.txt_embedder = nn.Linear(cfg.clip_dim, cfg.clip_dim)
         self.embeddings = MultiModalEmbedding(cfg, add_postion_embeddings=True)
         self.CrossAttention = CrossAttention(cfg)
         self.RSAEncoder = RSAEncoder(cfg)
         self.TextEncoder = TransformerEncoder(cfg)
         
-        decoder_classifier_weight = (
-            self.embeddings.word_embeddings.weight
-            if self.cfg.share_wd_cls_weight
-            else None
-        )
+        if self.cfg.share_wd_cls_weight:
+            decoder_classifier_weight = self.embeddings.word_embeddings.weight
+        else:
+            decoder_classifier_weight = None
         
         self.transformerdecoder = TransformerDecoder(cfg)
         self.decoder = PredictionHead(cfg, decoder_classifier_weight)
         
+        # loss
         if self.cfg.label_smoothing != 0:
-            self.loss_func = LabelSmoothingLoss(
-                cfg.label_smoothing, cfg.vocab_size, ignore_index=-1
-            )
+            self.loss_func = \
+                LabelSmoothingLoss(cfg.label_smoothing, cfg.vocab_size, ignore_index=-1)
         else:
             self.loss_func = nn.CrossEntropyLoss(ignore_index=-1)
-        
         self.actionloss_func = nn.CrossEntropyLoss()
-
         self.rec_loss = nn.MSELoss()
-        self.apply(self.init_bert_weights)
         self.cliploss = CLIPloss(hidden_dim=cfg.hidden_size, max_t_length=cfg.max_t_len)
+        
+        # init weigh
+        self.apply(self.init_bert_weights)
 
-        self.idx = 0
 
     def init_bert_weights(self, module):
         """
-        Initialize the weights.
+        Summary:
+            init weights
         """
         if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version

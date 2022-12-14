@@ -12,7 +12,6 @@ from utils import baseconfig, utils
 from utils import utils
 
 
-# ---------- MART config ----------
 class DatasetConfig(ConfigClass):
     """
     MART Dataset Configuration class
@@ -30,7 +29,6 @@ class DatasetConfig(ConfigClass):
         self.shuffle: bool = config.pop("shuffle")
         self.pin_memory: bool = config.pop("pin_memory")
         self.num_workers: int = config.pop("num_workers")
-        self.preload: bool = config.pop("preload")
 
 
 class Config(ConfigClass):
@@ -87,7 +85,6 @@ class Config(ConfigClass):
     def __init__(self, config: Dict[str, Any], strict: bool=True) -> None:
         # basic setting
         self.description: str = config.pop("description", "no description given.")
-        self.name = "config_ret"
         self.strict = strict
         self.config = config
         self.config_orig = deepcopy(config)
@@ -289,18 +286,6 @@ def update_config_from_args(config: Dict, args: argparse.Namespace, *, verbose: 
             )
     config["train"]["batch_size"] = args.batch_size
     config["label_smoothing"] = args.label_smoothing
-    if args.preload:
-        config["dataset_train"]["preload"] = True
-        config["dataset_val"]["preload"] = True
-        if verbose:
-            print(f"    Change config: Set dataset_(train|val).preload to True")
-    if args.no_preload or args.validate:
-        config["dataset_train"]["preload"] = False
-        config["dataset_val"]["preload"] = False
-        if verbose:
-            print(
-                f"    Change config: Set dataset_(train|val).preload to False (--no_preload or --validate)"
-            )
 
     return config
 

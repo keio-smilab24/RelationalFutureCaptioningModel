@@ -44,7 +44,6 @@ dataset_train:
     shuffle: true
     pin_memory: true
     num_workers: 4
-    preload: false
 dataset_val:
     same_as: "dataset_train"
     shuffle: false

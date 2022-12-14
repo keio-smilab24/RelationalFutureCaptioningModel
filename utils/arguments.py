@@ -11,8 +11,6 @@ def set_parser():
     parser = add_exp_setting(parser)
     # set exp running setting (trainer)
     parser = add_trainer_setting(parser)
-    # feature preloading
-    parser.add_argument("--preload", action="store_true", help="Preload everything.")
     # set mart setting
     parser = add_model_setting(parser)
     # set others setting

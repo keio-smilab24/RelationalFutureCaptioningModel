@@ -6,7 +6,7 @@ import json
 import csv
 import os
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import pandas as pd
 import nltk
@@ -19,28 +19,13 @@ from tqdm import tqdm
 import cv2
 
 from utils.configs import Config
-from utils.baseconfig import ConfigClass, ConstantHolder
-
-class DataTypesConstCaption(ConstantHolder):
-    """
-    Possible video data types for the dataset:
-    Video features or COOT embeddings.
-    """
-
-    VIDEO_FEAT = "video_feat"
-    COOT_EMB = "coot_emb"
 
 
 def make_dict(train_caption_file, word2idx_filepath, datatype: str="bila"):
-    '''
-    Args:
-        Before:
-            train_caption_file: annotations/BILA/captioning_train.json
-            word2idx_filepath: annotations/ponnet_word2idx.json
-        After:
-            train_caption_file: data/BilaS/bilas_mecab.jsonl
-            word2idx_filepath: data/BilaS/ponnet_word2idx.json
-    '''
+    """
+    Summary:
+        学習集合に含まれる単語から辞書(word2id)を作成する
+    """
     if datatype == "bila":
         max_words = 0
         sentence_list = []
@@ -114,7 +99,6 @@ class BilaDataset(data.Dataset):
         max_n_sen: int,
         mode: str="train",
         annotations_dir: str = "data",
-        preload: bool = False,
         datatype: str = "bila",
         clip_dim: int = 768,
     ):
@@ -138,10 +122,7 @@ class BilaDataset(data.Dataset):
         self.max_n_sen = max_n_sen
 
         # Train or val mode
-        self.mode = mode        # train
-        self.preload = preload  # False
-
-        # ---------- Load metadata ----------
+        self.mode = mode
 
         # determine metadata file
         tmp_path = "BILA"
@@ -204,26 +185,13 @@ class BilaDataset(data.Dataset):
                 coll_data.append(raw_data)
         
         self.data = coll_data
-
-        # ---------- Load video data ----------
-
-        # Decide whether to load COOT embeddings or video features
-        
-        # COOT embeddings
-        self.data_type = DataTypesConstCaption.COOT_EMB # coot_emb
         
         # map video id and clip id to clip number
         self.clip_nums = []
         for clip in tqdm(range(len(self.data))):
             self.clip_nums.append(str(clip)) # ['0', '1', ..., '999']
 
-        self.frame_to_second = None  # Don't need this for COOT embeddings # None
-
-        print(
-            f"Dataset {self.dataset_name} #{len(self)} {self.mode} input {self.data_type}"
-        )
-
-        self.preloading_done = False
+        print(f"Dataset {self.dataset_name} #{len(self)} {self.mode}")
 
     def __len__(self):
         return len(self.data)
@@ -528,8 +496,9 @@ class BilaDataset(data.Dataset):
 
     def collate_fn(self, batch):
         """
-        datasetの出力
-            [items, meta] = [[data{}], [meta{}]] = dataset[batch_idx]
+        Summary:
+            DataLoaderにおけるcollate_fnの自作版
+            batch内にbbox等で可変長の入力を持つときに自作する必要あり
         """
         # meta側
         raw_batch_meta = [e[1] for e in batch]
@@ -568,19 +537,22 @@ class BilaDataset(data.Dataset):
 
 def pad_tensors(key, inputs, lens=None, pad=0):
     """
+    Summary:
+        batch内の可変長のデータ(bbox等)の形状を0埋めして揃える関数
     Args:
-        keys   : bboxed or bbox_feats
-        tensors: batch中のデータ
-        lens   : length
-        pad    : pad(int)
-    B x [T, ...]
+        keys   : 入力データ(辞書)のkey (bboxed or bbox_feats)
+        inputs : 実際のbatch中の入力データ
+        lens   : 最大形状列
+        pad    : 穴埋めする値
     """
     # 最大数を計算
     if lens is None:
         lens = [e.shape[0] for e in inputs]
     max_len = max(lens)
+    
     # batch_size
     bs = len(inputs)
+    
     # 配列の作成
     dim = inputs[0].shape[-1]
     dtype = inputs[0].dtype
@@ -592,11 +564,9 @@ def pad_tensors(key, inputs, lens=None, pad=0):
     
     if key == "bbox_feats":
         return torch.from_numpy(output)
-
-    # 面積情報の追加
-    # obstacle_position_feature = torch.cat([bbox, bbox[:, 4:5] * bbox[:, 5:]], dim=-1)
     if key == "bboxes":
         output = torch.from_numpy(output)
+        # 面積情報の追加
         output = torch.cat([output, output[:,:,4:5]*output[:,:,5:]], dim=-1)
         return output
 
@@ -646,7 +616,6 @@ def create_datasets_and_loaders(
         cfg.max_n_sen,
         mode="train",
         annotations_dir=annotations_dir,
-        preload=cfg.dataset_train.preload,
         datatype=datatype,
         clip_dim=cfg.clip_dim,
     )
@@ -660,7 +629,6 @@ def create_datasets_and_loaders(
         max_n_sen_val,
         mode="val",
         annotations_dir=annotations_dir,
-        preload=cfg.dataset_val.preload,
         datatype=datatype,
         clip_dim=cfg.clip_dim,
     )
@@ -688,7 +656,6 @@ def create_datasets_and_loaders(
         max_n_sen_val,
         mode="test",
         annotations_dir=annotations_dir,
-        preload=cfg.dataset_val.preload,
         datatype=datatype,
         clip_dim=cfg.clip_dim,
     )

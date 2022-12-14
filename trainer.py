@@ -58,11 +58,7 @@ TRANSLATION_METRICS_LOG = ["Bleu_4", "METEOR", "ROUGE_L", "CIDEr", "re4"]
 
 class Trainer:
     """
-    Trainer for retrieval.
-
-    Notes:
-        The parent TrainerBase takes care of all the basic stuff: Setting up directories and logging,
-        determining device and moving models to cuda, setting up checkpoint loading and metrics.
+    Trainer
 
     Args:
         cfg: Loaded configuration instance.
@@ -348,7 +344,7 @@ class Trainer:
             wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}_linear_to_cnn"
             wandb.init(name=wandb_name, project="BilaS")
         
-        # time book-keeping etc.
+        # set start epoch and time & show log
         self.hook_pre_train(show_log)
         
         for _epoch in tqdm(range(self.state.current_epoch, self.cfg.train.num_epochs)):
@@ -392,6 +388,7 @@ class Trainer:
                         for step_data in batch[0]
                     ]
 
+                    # dict -> list
                     input_ids_list = [e["input_ids"] for e in batched_data]
                     img_feats_list = [e['img_feats'] for e in batched_data]
                     txt_feats_list = [e['txt_feats'] for e in batched_data]
@@ -434,8 +431,9 @@ class Trainer:
                     batch_snt_loss += snt_loss
                     batch_rec_loss += rec_loss
                     batch_clip_loss += clip_loss
-
-                self.hook_post_forward_step_timer()  # hook for step timing
+                
+                # hook for step timing
+                self.hook_post_forward_step_timer()
 
                 grad_norm = None
                 if self.cfg.fp16_train:

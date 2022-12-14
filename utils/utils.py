@@ -132,8 +132,6 @@ def get_timestamp_for_filename(dtime: Optional[datetime.datetime] = None):
     return ts
 
 
-# ---------- Config / dict ----------
-
 def resolve_sameas_config_recursively(config: Dict, *, root_config: Optional[Dict] = None):
     """
     Recursively resolve config fields described with same_as.
