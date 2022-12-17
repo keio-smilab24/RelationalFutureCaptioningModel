@@ -19,13 +19,21 @@ class BaseEmbedder(nn.Module):
         self.conv2 = nn.Conv2d(456, 512, 5, stride=3)
         self.conv3 = nn.Conv2d(512, 768, 8, stride=1)
 
+        self.clip, preprocess = clip.load("RN50")
+        self.clip_linear = nn.Linear(1024, cfg.clip_dim)
+
         if cfg.fix_emb:
             for params in self.resnet.parameters():
                 params.requires_grad = False
+        
+        for params in self.clip.parameters():
+            params.requires_grad = False
 
     def forward(self, x: torch.Tensor):
         B,L,H,W,C = x.size()
         x = x.view(-1, C, H, W)
+        clip_x = x.clone().cuda()
+        
         x = self.resnet.conv1(x)
         x = self.resnet.bn1(x)
         x = self.resnet.relu(x)
@@ -35,6 +43,11 @@ class BaseEmbedder(nn.Module):
         x = self.conv2(x)
         x = self.conv3(x)
         x = x.view(B, L, -1)
+        
+        clip_x = self.clip.encode_image(clip_x).float()
+        clip_x = self.clip_linear(clip_x).view(B, L, -1)
+        
+        x = x + clip_x
 
         return x
 
