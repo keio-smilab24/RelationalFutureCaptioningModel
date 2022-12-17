@@ -66,9 +66,9 @@ num_attention_heads: 12
 num_hidden_layers: 2
 n_memory_cells: 1
 share_wd_cls_weight: false
-fix_emb: false
+fix_emb: true
 cross_attention_layers: 2
-ca_embedder : "Base"
+ca_embedder : "Res"
 # ---------- Uniter ----------------
 uniter_hidden_size: 768
 uniter_hidden_dropout_prob: 0.1

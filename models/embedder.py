@@ -60,16 +60,29 @@ class ResEmbedder(nn.Module):
         self.resnet = models.resnet50(pretrained=True)
         self.linear = nn.Linear(1000, cfg.clip_dim)
 
+        self.clip, preprocess = clip.load("RN50")
+        self.clip_linear = nn.Linear(1024, cfg.clip_dim)
+
         if cfg.fix_emb:
             for params in self.resnet.parameters():
                 params.requires_grad = False
+        
+        for params in self.clip.parameters():
+            params.requires_grad = False
 
     def forward(self, x: torch.Tensor):
         B,L,H,W,C = x.size()
         x = x.view(-1, C, H, W)
+        clip_x = x.clone().cuda()
+
         x = self.resnet(x)
         x = self.linear(x)
         x = x.view(B, L, -1)
+
+        clip_x = self.clip.encode_image(clip_x).float()
+        clip_x = self.clip_linear(clip_x).view(B,L,-1)
+
+        x = x + clip_x
 
         return x
 

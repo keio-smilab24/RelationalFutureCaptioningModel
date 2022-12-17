@@ -111,22 +111,41 @@ class CAEncoderLayer(nn.Module):
         self.cfg = cfg
 
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        self.mha = MultiHeadAttention(cfg)
+        
+        # source - target
+        self.crossmha = MultiHeadAttention(cfg)
         self.rand = torch.randn(1, requires_grad=True).cuda()
         self.linear = Intermediate(cfg)
         self.rand_z = torch.randn(1, requires_grad=True).cuda()
+
+        # self attention
+        self.selfmha = MultiHeadAttention(cfg)
+        self.rand2 = torch.randn(1, requires_grad=True).cuda()
+        self.linear2 = Intermediate(cfg)
+        self.rand_z2 = torch.randn(1, requires_grad=True).cuda()
     
     def forward(self, x:torch.Tensor, source_kv:torch.Tensor, attention_mask=None):
+        # souce-target
         identity_x = x.clone().cuda()
-        x = self.LayerNorm(x)
-        x = self.mha(x=x, source_kv=source_kv)
+        x = self.crossmha(x=x, source_kv=source_kv)
         x = self.rand*identity_x + (1-self.rand)*x
-        identity_x = x.clone().cuda()
         x = self.LayerNorm(x)
-        output = self.linear(x)
-        output = self.rand_z*identity_x + (1-self.rand_z)*output
+        identity_x = x.clone().cuda()
+        x = self.linear(x)
+        x = self.rand_z*identity_x + (1-self.rand_z)*x
+        x = self.LayerNorm(x)
 
-        return output
+        # self attention
+        identity_x = x.clone().cuda()
+        x = self.selfmha(x)
+        x = self.rand2*identity_x + (1-self.rand2)*x
+        x = self.LayerNorm(x)
+        identity_x = x.clone().cuda()
+        x = self.linear2(x)
+        x = self.rand_z2*identity_x + (1-self.rand_z2)*x
+        x = self.LayerNorm(x)
+
+        return x
 
 
 

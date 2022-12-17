@@ -40,7 +40,7 @@ class RecursiveTransformer(nn.Module):
         self.txt_embedder = nn.Linear(cfg.clip_dim, cfg.clip_dim)
         self.embeddings = MultiModalEmbedding(cfg, add_postion_embeddings=True)
         self.CrossAttention = CrossAttention(cfg)
-        self.RSAEncoder = RSAEncoder(cfg)
+        # self.RSAEncoder = RSAEncoder(cfg)
         self.TextEncoder = TransformerEncoder(cfg)
         
         if self.cfg.share_wd_cls_weight:
@@ -112,18 +112,21 @@ class RecursiveTransformer(nn.Module):
         cls_token = torch.zeros((B,1,D), requires_grad=True).cuda()
         bos_token = torch.zeros((B,1,D), requires_grad=True).cuda()
         # img feats cat
-        img_feats = torch.cat((cls_token, img_feats, bos_token), dim=1)
+        # img_feats = torch.cat((cls_token, img_feats, bos_token), dim=1)
 
         # cat: (B,Lv,D) + (B,Lt,D) -> (B,Lv+Lt,D)
-        features = torch.cat((img_feats, txt_feats), dim=1)
+        features = torch.cat(
+            (cls_token, img_feats[:,:self.cfg.max_v_len-2,:], bos_token, txt_feats)
+            , dim=1)
         
         # 再構成用
         rec_feat = features[:,1,:].clone()
         # 画像only (B, Lv-2, D)
-        img_feats = features[:,1:self.cfg.max_v_len-1,:].clone()
+        # TODO : ここ意味わからん
+        # img_feats = features[:,1:self.cfg.max_v_len-1,:].clone()
 
         # Time Series Module
-        img_feats, _  = self.RSAEncoder(img_feats)
+        # img_feats, _  = self.RSAEncoder(img_feats)
 
         embeddings = self.embeddings(input_ids, features, token_type_ids)
         
@@ -267,7 +270,7 @@ class CrossAttention(nn.Module):
         target_feats = self.target_encoder(hidden_states=target_feats, source_kv=camera_feats) #(B,4(2),D)
 
         # concat
-        img_feats = torch.cat((camera_feats, target_feats[:,:2,:]), dim=1) #(B, 6(4), D)
+        img_feats = torch.cat((camera_feats, target_feats), dim=1) #(B, 6(4), D)
 
         return img_feats
 
