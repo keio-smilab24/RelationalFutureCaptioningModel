@@ -105,6 +105,10 @@ class BilaDataset(data.Dataset):
         self.datatype = datatype
         self.clip_dim = clip_dim
 
+        # clip normalize para
+        self.mean = [0.48145466, 0.4578275, 0.40821073]
+        self.std = [0.26862954, 0.26130258, 0.27577711]
+
         # metadata settings
         self.dataset_name = dataset_name # BILA
         if datatype == "bila":
@@ -307,12 +311,27 @@ class BilaDataset(data.Dataset):
                 img_path = str(Path(ponnet_path, df_scene[img_list_path[idx]].iloc[-1]))
                 
                 if img_list_path[idx] == "image_rgb":
-                    rec_img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(16, 16))
+                    rec_img = cv2.imread(img_path).astype(np.float32)
+                    rec_img = cv2.resize(cv2.cvtColor(rec_img, cv2.COLOR_BGR2RGB), dsize=(16, 16))
                 
-                img = torch.from_numpy(cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(224, 224)))
+                img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(224, 224))
+                if img_list_path[idx] != "attnetion_map_rgb":
+                    img = img / 255.0
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img = self.normalize_img(img)
+                img = torch.from_numpy(img)
                 img_list.append(img)
 
         return img_list, rec_img
+    
+    def normalize_img(self, img):
+        """
+        画像をnormalizeする
+        """
+        H,W,C = img.shape
+        for ch in range(C):
+            img[ch] = (img[ch] - self.mean[ch]) / self.std[ch]
+        return img
 
 
     def convert_example_to_features(self, example):
