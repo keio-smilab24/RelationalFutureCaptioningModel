@@ -228,6 +228,10 @@ class EMA:
         self.shadow[name] = val.clone()
 
     def __call__(self, model, step):
+        """
+        Summary:
+            指数移動平均を計算し、self.shadowに登録する
+        """
         decay = min(self.decay, (1 + step) / (10.0 + step))
         for name, param in model.named_parameters():
             if param.requires_grad:
@@ -238,14 +242,27 @@ class EMA:
                 self.shadow[name] = new_average.clone()
 
     def assign(self, model, update_model: bool = True):
+        """
+        Summary:
+            originalのパラメータを保存 (self.original)
+            originalのパラメータを更新 (self.shadow)
+        Args:
+            update_model: 更新をするか
+        """
         for name, param in model.named_parameters():
             if param.requires_grad:
                 assert name in self.shadow
                 self.original[name] = param.data.clone()
+                
+                # original モデルの値を更新
                 if update_model:
                     param.data = self.shadow[name]
 
     def resume(self, model):
+        """
+        Summary:
+            assing時(valid, test)に登録されるoriginモデルのパラメータで更新
+        """
         for name, param in model.named_parameters():
             if param.requires_grad:
                 assert (

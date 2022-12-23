@@ -79,7 +79,8 @@ class CaptionEvaluator:
         except (AttributeError, FileNotFoundError) as e:
             print(f"Meteor couldn't start due to {e}")
             met = None
-
+        
+        # jaSPICEはここ
         if self.verbose or self.all_scorer:
             self.scorers = [
                 (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
