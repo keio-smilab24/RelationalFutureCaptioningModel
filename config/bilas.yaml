@@ -98,4 +98,4 @@ dstore_size: 100000
 k_num: 10
 alpha: 0.25
 dstore_id_num: 56100
-knn_temperature: 10 # TODO: 変更
+knn_temperature: 100 # TODO: 変更

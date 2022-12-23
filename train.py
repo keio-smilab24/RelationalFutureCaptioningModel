@@ -57,30 +57,63 @@ def main():
             load_epoch=args.load_epoch, load_model=args.load_model, is_test=(args.validate or args.test),
             data_dir=args.data_dir, show_log=args.show_log,)
 
-        if args.test:
+        # train/val/test related with knn
+        if args.make_knn_dstore:
             assert args.load_model is not None
-            trainer.test_epoch(test_loader, datatype=args.datatype, do_knn=args.do_knn, test_only=args.test)
+            print("---------------------------------------------")
+            print(f'Use Checkpoint:{args.load_model} | Make Dstore >>> ', end="")
+            d_size = cfg.dstore_size
+            
+            # 上書きされないように最初に1回のみ作成
+            dstore_keys = np.memmap(cfg.dstore_keys_path, dtype=np.float32, mode="w+", shape=(d_size, cfg.clip_dim))
+            dstore_vals = np.memmap(cfg.dstore_vals_path, dtype=np.float32, mode="w+", shape=(d_size, cfg.vocab_size))
+            del dstore_keys, dstore_vals
+            print("Done")
+
+            print("\nStart >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+            trainer.validate_epoch(train_loader, datatype=args.datatype, make_knn_dstore=args.make_knn_dstore, val_only=True)
+            print('Fin')
+            print(f'Save dstore Num >>>> {trainer.translator.dstore_idx}')
+            
+            trainer.close()
+            del model
+            del trainer
+            return
+        
+        if args.do_knn:
+            assert args.load_model is not None
+            print("\nDo Knn >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+            if args.validate:
+                trainer.validate_epoch(val_loader, datatype=args.datatype, do_knn=True, val_only=True)
+            elif args.test:
+                trainer.test_epoch(test_loader, datatype=args.datatype, do_knn=True, test_only=True)
+            else:
+                raise ValueError("do_knn and (validate or test) is necessary!!")
+            
+            trainer.close()
+            del model
+            del trainer
+            return
+
+
+        # normal test / valid / train 
+        if args.test:
+            assert args.load_model is not None, "--load_model is necessary"
+            trainer.test_epoch(test_loader, datatype=args.datatype, test_only=args.test)
         elif args.validate:
-            if not trainer.load and not args.ignore_untrained:
-                raise ValueError("Validating an untrained model! No checkpoints were loaded. Add --ignore_untrained "
-                                    "to ignore this error.")
-            trainer.validate_epoch(val_loader, datatype=args.datatype, do_knn=args.do_knn, val_only=args.validate)
+            assert args.load_model is not None, "--load_model is necessary"
+            trainer.validate_epoch(val_loader, datatype=args.datatype, val_only=args.validate)
         else:
             trainer.train_model(
                     train_loader, val_loader, 
                     test_loader, datatype=args.datatype,
-                    use_wandb=args.wandb, show_log=args.show_log,
-                    make_knn_dstore=args.make_knn_dstore,
-                    do_knn=args.do_knn)
+                    use_wandb=args.wandb, show_log=args.show_log,)
         
         if args.del_weights:
             print('Pay Attention : Delete All Model weights ... ', end='')
             weights_dir = os.path.join(trainer.exp.path_base, "models")
             shutil.rmtree(weights_dir)
             print('fin')
-        
-        if args.make_knn_dstore:
-            print(f'Save dstore Num >>>> {trainer.translator.dstore_idx}')
 
         trainer.close()
         del model

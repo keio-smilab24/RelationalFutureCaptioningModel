@@ -347,20 +347,25 @@ class Trainer:
         datatype: str = "bila",
         use_wandb: bool = False,
         show_log: bool = False,
-        make_knn_dstore: bool=False,
-        do_knn: bool=False,
     ) -> None:
         
+        # set wandb
         self.use_wandb = use_wandb
         if use_wandb:
             wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}_debug_make_knn_dstore"
             wandb.init(name=wandb_name, project="BilaS")
         
         # set start epoch and time & show log
-        self.hook_pre_train(show_log)
+        self.state.start_epoch = self.state.current_epoch
+        self.timer_train_start = timer()
+        if show_log:
+            self.logger.info(f"Training from {self.state.current_epoch} to {self.cfg.train.num_epochs}")
+            self.logger.info("Training Models on devices " + ", ".join([
+                f"{key}: {next(val.parameters()).device}" for key, val in self.model_mgr.model_dict.items()]))
+        
         
         for _epoch in tqdm(range(self.state.current_epoch, self.cfg.train.num_epochs)):
-            # set models to train, time book-keeping
+            # set time & clear metric
             self.hook_pre_train_epoch(show_log)
 
             # check exponential moving average
@@ -372,6 +377,7 @@ class Trainer:
                 # originalのモデルにvalid(test)時に登録されるパラメータに更新
                 self.ema.resume(self.model)
             
+            # monitor Nan
             torch.autograd.set_detect_anomaly(True)
 
             total_loss = 0
@@ -383,7 +389,6 @@ class Trainer:
             batch_rec_loss = 0.0
             batch_clip_loss = 0.0
 
-            # model to train
             self.model.train()
             for step, batch in enumerate(tqdm(train_loader)):
                 # hook for step timing
@@ -445,7 +450,7 @@ class Trainer:
                     batch_rec_loss += rec_loss
                     batch_clip_loss += clip_loss
                 
-                # hook for step timing
+                # set time
                 self.timer_step_backward = timer()
                 self.timedelta_step_forward = self.timer_step_backward - self.timer_step_forward
 
@@ -494,7 +499,7 @@ class Trainer:
                     break
 
                 additional_log = f" Grad {self.metrics.meters[MMeters.GRAD].avg:.2f}"
-                # hook for step timing
+                # set time
                 self.timedelta_step_backward = timer() - self.timer_step_backward
 
                 # post-step hook: gradient clipping, profile gpu, update metrics, count step, step LR scheduler, log
@@ -507,10 +512,6 @@ class Trainer:
                     disable_grad_clip=True,
                     show_log=show_log
                 )
-
-            # save model
-            models_file = self.exp.get_models_file(self.state.current_epoch)
-            torch.save(self.model, str(models_file))
 
             # log train statistics
             loss_per_word = 1.0 * total_loss / n_word_total
@@ -539,6 +540,7 @@ class Trainer:
                 _val_loss, _val_score, is_best, _metrics = self.validate_epoch(
                     val_loader, datatype=datatype
                 )
+                
                 print("#############################################")
                 print("Do test")
                 self.test_epoch(test_loader, datatype=datatype)
@@ -553,31 +555,14 @@ class Trainer:
             self.hook_post_train_and_val_epoch(do_val, is_best)
 
         # show end of training log message
-        self.hook_post_train()
+        if show_log:
+            self.logger.info(f"In total, training {self.state.current_epoch} epochs took "
+                            f"{self.state.time_total:.3f}s ({self.state.time_total - self.state.time_val:.3f}s "
+                            f"train / {self.state.time_val:.3f}s val)")
         print("###################################################")
+        
         self.logger.info(
-            ", ".join(
-                [f"{name} {self.higest_test[name]:.2%}" for name in self.test_metrics]
-            )
-        )
-
-        # make knn dstore only last epoch
-        if make_knn_dstore:
-            print("--------------------------")
-            print(f'epoch : {_epoch} | Make Dstore >>> ', end="")
-            d_size = self.cfg.dstore_size
-            dstore_keys = np.memmap(self.cfg.dstore_keys_path, dtype=np.float32, mode="w+", shape=(d_size, self.cfg.clip_dim))
-            dstore_vals = np.memmap(self.cfg.dstore_vals_path, dtype=np.float32, mode="w+", shape=(d_size, self.cfg.vocab_size))
-            del dstore_keys, dstore_vals
-            print("Done")
-            print("---------- Start ----------")
-            self.validate_epoch(train_loader, datatype=datatype, make_knn_dstore=make_knn_dstore)
-            print('---------- Done -----------')
-
-        if do_knn:
-            print('---------- Do KNN ----------')
-            self.test_epoch(test_loader, datatype=datatype, do_knn=do_knn)
-
+            ", ".join([f"{name} {self.higest_test[name]:.2%}" for name in self.test_metrics]))
 
 
     @torch.no_grad()
@@ -597,16 +582,6 @@ class Trainer:
         Translation: Use greedy generated words to predicted next words, the true inference situation.
         eval_mode can only be set to `val` here, as setting to `test` is cheating
         0. run inference, 1. Get METEOR, BLEU1-4, CIDEr scores, 2. Get vocab size, sentence length
-
-        Args:
-            data_loader: Dataloader for validation
-
-        Returns:
-            Tuple of:
-                validation loss
-                validation score
-                epoch is best
-                custom metrics with translation results dictionary
         """
         if val_only:
             self.ema = None
@@ -616,6 +591,7 @@ class Trainer:
         self.timer_val_epoch = timer()
         self.timer_step = timer()
         
+        dataset: BilaDataset = data_loader.dataset
         forward_time_total = 0
         total_loss = 0
         n_word_total = 0
@@ -625,6 +601,7 @@ class Trainer:
         batch_rec_loss = 0.0
         batch_clip_loss = 0.0
         batch_idx = 0
+        num_steps = 0
 
         # originalのモデルの値を保存 + 値を更新
         if self.ema is not None:
@@ -636,12 +613,9 @@ class Trainer:
             "results": defaultdict(list),
             "external_data": {"used": "true", "details": "ay"},
         }
-        dataset: BilaDataset = data_loader.dataset
 
-        num_steps = 0
         pbar = tqdm(
-            total=len(data_loader), desc=f"Validate epoch {self.state.current_epoch}"
-        )
+            total=len(data_loader), desc=f"Validate epoch {self.state.current_epoch}")
 
         self.model.eval()
         for _step, batch in enumerate(data_loader):
@@ -649,6 +623,7 @@ class Trainer:
             self.timer_step_forward = timer()
             
             with autocast(enabled=self.cfg.fp16_val):
+                # input to cuda
                 batched_data = [
                     prepare_batch_inputs(
                         step_data,
@@ -657,6 +632,7 @@ class Trainer:
                     )
                     for step_data in batch[0]
                 ]
+                
                 # validate (ground truth as input for next token)
                 input_ids_list = [e["input_ids"] for e in batched_data]
                 img_feats_list = [e['img_feats'] for e in batched_data]
@@ -684,6 +660,7 @@ class Trainer:
                 batch_rec_loss += rec_loss
                 batch_clip_loss += clip_loss
                 batch_idx += 1
+                
                 # translate (no ground truth text)
                 step_sizes = batch[1]  # list(int), len == bsz
                 meta = batch[2]  # list(dict), len == bsz
@@ -702,6 +679,7 @@ class Trainer:
                     model_inputs,
                     use_beam=self.cfg.use_beam,
                     make_knn_dstore=make_knn_dstore,
+                    do_knn=do_knn,
                 )
 
                 for example_idx, (step_size, cur_meta) in enumerate(
@@ -763,10 +741,11 @@ class Trainer:
         batch_res["results"] = self.translator.sort_res(batch_res["results"])
 
         # write translation results of this epoch to file
+        # use train only when making knn dstore
         if make_knn_dstore:
             eval_mode = "train"
         else:
-            eval_mode = self.cfg.dataset_val.split  # which dataset split
+            eval_mode = self.cfg.dataset_val.split
         
         file_translation_raw = self.exp.get_translation_files(
             self.state.current_epoch, eval_mode, make_knn_dstore=make_knn_dstore,
@@ -1250,26 +1229,6 @@ class Trainer:
                     # epoch N+1 now. In validation, we are validating on epoch N.
                     self.state.current_epoch += 1
 
-    def hook_pre_train(self, show_log:bool=False) -> None:
-        """
-        Hook called on training start. Remember start epoch, time the start, log info.
-        """
-        self.state.start_epoch = self.state.current_epoch
-        self.timer_train_start = timer()
-        if show_log:
-            self.logger.info(f"Training from {self.state.current_epoch} to {self.cfg.train.num_epochs}")
-            self.logger.info("Training Models on devices " + ", ".join([
-                f"{key}: {next(val.parameters()).device}" for key, val in self.model_mgr.model_dict.items()]))
-
-    def hook_post_train(self, show_log:bool=False) -> None:
-        """
-        Hook called on training finish. Log info on total num epochs trained and duration.
-        """
-        if show_log:
-            self.logger.info(f"In total, training {self.state.current_epoch} epochs took "
-                            f"{self.state.time_total:.3f}s ({self.state.time_total - self.state.time_val:.3f}s "
-                            f"train / {self.state.time_val:.3f}s val)")
-
     # ---------- Public hooks that run every epoch ----------
 
     def hook_pre_train_epoch(self, show_log:bool=False) -> None:
@@ -1510,8 +1469,8 @@ class Trainer:
         self.metrics.save_epoch(self.state.current_epoch)
 
         # models
-        # models_file = self.exp.get_models_file(self.state.current_epoch)
-        # torch.save(self.model, str(models_file))
+        models_file = self.exp.get_models_file(self.state.current_epoch)
+        torch.save(self.model, str(models_file))
 
         # optimizer and scheduler
         opt_file = self.exp.get_optimizer_file(self.state.current_epoch)
