@@ -217,7 +217,8 @@ class MetersConst(ConstantHolder):
 
 def update_config_from_args(config: Dict, args: argparse.Namespace, *, verbose: bool = True) -> Dict[str, Any]:
     """
-    Modify config and paths given script arguments.
+    Summary:
+        実行時に指定されたパラメータにcofigファイルを上書きする
 
     Args:
         config: Config dictionary.
@@ -228,24 +229,28 @@ def update_config_from_args(config: Dict, args: argparse.Namespace, *, verbose: 
         Updated config dict.
     """
     # parse the --config inline modifier
-    if args.config is not None:
+    if args.modify_config is not None:
         # get all fields to update from the argument and loop them
-        update_fields: List[str] = args.config.split(",")
+        update_fields: List[str] = args.modify_config.split(",")
         for field_value in update_fields:
             # get field and value
             fields_str, value = field_value.strip().split("=")
-            # convert value if necessary
+            
+            # string -> fload -> int if possible
             try:
                 value = float(value)
                 if round(value) == value:
                     value = int(value)
             except ValueError:
                 pass
+            
+            # bool
             if str(value).lower() == "true":
                 value = True
             elif str(value).lower() == "false":
                 value = False
-            # update the correct nested dictionary field
+            
+            # update
             fields = fields_str.split(".")
             current_dict = config
             for i, field in enumerate(fields):
@@ -416,10 +421,10 @@ def get_config_file(args: argparse.Namespace) -> Tuple[str, str, str]:
         使用するconfig fileを返す
         指定されていない場合 defaultのconfig fileを返す
     """
-    if args.config_file is None:
+    if args.config is None:
         config_file = Path(args.config_dir, f"default.yaml")
     else:
-        config_file = args.config_file
+        config_file = args.config
     print(f"config file: {config_file}")
     
     return config_file

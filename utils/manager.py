@@ -6,11 +6,9 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Union, Any
 
 import numpy as np
-import torch
-from torch import nn
 
 from utils.utils import TrainerPathConst
-from utils.configs import Config, TrainerState
+from utils.configs import TrainerState
 
 class FilesHandler:
     """
@@ -120,71 +118,35 @@ class FilesHandler:
     def get_models_file(self, epoch: Union[int, str]) -> Path:
         """
         Get file path for storing the model.
-
-        Args:
-            epoch: Epoch.
-
-        Returns:
-            Path
         """
         return self.path_models / f"{TrainerPathConst.FILE_PREFIX_MODEL}_{epoch}.pth"
 
     def get_models_file_ema(self, epoch: Union[int, str]) -> Path:
         """
         Get file path for storing the model EMA weights.
-
-        Args:
-            epoch: Epoch.
-
-        Returns:
-            Path
         """
         return self.path_models / f"{TrainerPathConst.FILE_PREFIX_MODELEMA}_{epoch}.pth"
 
     def get_optimizer_file(self, epoch: Union[int, str]) -> Path:
         """
         Get file path for storing the model.
-
-        Args:
-            epoch: Epoch.
-
-        Returns:
-            Path
         """
         return self.path_models / f"{TrainerPathConst.FILE_PREFIX_OPTIMIZER}_{epoch}.pth"
 
     def get_trainerstate_file(self, epoch: Union[int, str]) -> Path:
         """
         Get file path for storing the state of the trainer. This is needed for currectly resuming training.
-
-        Args:
-            epoch: Epoch.
-
-        Returns:
-            Path
         """
         return self.path_models / f"{TrainerPathConst.FILE_PREFIX_TRAINERSTATE}_{epoch}.json"
 
     def get_metrics_step_file(self, epoch: Union[int, str]) -> Path:
         """
         Get file path for storing step-based metrics.
-
-        Args:
-            epoch: Epoch.
-
-        Returns:
-            Path
         """
         return self.path_metrics / f"{TrainerPathConst.FILE_PREFIX_METRICS_STEP}_{epoch}.json"
 
     def get_metrics_epoch_file(self, epoch: Union[int, str]) -> Path:
         """
         Get file path for storing epoch-based metrics.
-
-        Args:
-            epoch: Epoch.
-
-        Returns:
-            Path
         """
         return self.path_metrics / f"{TrainerPathConst.FILE_PREFIX_METRICS_EPOCH}_{epoch}.json"

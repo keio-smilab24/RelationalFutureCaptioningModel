@@ -49,7 +49,7 @@ def main():
             print(model)
 
         # always load best epoch during validation
-        load_best = args.load_best or args.validate # False
+        load_best = args.load_best or args.validate
 
         trainer = Trainer(
             cfg, model, run_name, len(train_loader), log_dir=args.log_dir,

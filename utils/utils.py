@@ -477,11 +477,11 @@ def count_parameters(model, verbose=True):
 
 def load_yaml_to_config(yaml_file: Union[str, Path]) -> Dict[str, Any]:
     """
-    Load given yaml file. Supports loading scientific floats like 1e-8 as python floats. Preserves key order.
-
+    Summary:
+        Load given yaml file.
+        Supports loading scientific floats like 1e-8 as python floats. Preserves key order.
     Args:
         yaml_file: File to load
-
     Returns:
         Loaded config as nested dict.
     """
@@ -491,11 +491,11 @@ def load_yaml_to_config(yaml_file: Union[str, Path]) -> Dict[str, Any]:
 
 def convert_yaml_to_dict(yaml_str: str) -> Dict[str, Any]:
     """
-    Load given yaml string. Supports loading scientific floats like 1e-8 as python floats. Preserves key order.
-
+    Summry:
+        与えられたyamlファイルのPathから辞書を作成
+        floatに変換可能なstrはfloatに変換 & 1e-2 -> 0.01に変換
     Args:
         yaml_str: String to load
-
     Returns:
         Loaded config as nested dict.
     """
@@ -505,11 +505,10 @@ def convert_yaml_to_dict(yaml_str: str) -> Dict[str, Any]:
     # support loading scientific float values
     def post_process(d: Mapping[str, Any]) -> Dict[str, Any]:
         """
-        Recursively parse a dict and try to convert all strings to floats, fail silently.
-
+        Summary:
+            Recursively parse a dict and try to convert all strings to floats, fail silently.
         Args:
             d: Input dict.
-
         Returns:
             Dict where strings like "1e-2" have been converted to the corresponding float 0.01
         """

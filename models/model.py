@@ -294,7 +294,7 @@ def create_model(
     model = RecursiveTransformer(cfg, vocab_size=vocab_size)
 
     # output model properties
-    if verbose: # true
+    if verbose:
         print(f"Model: {model.__class__.__name__}")
         count_parameters(model)
         if hasattr(model, "embeddings") and hasattr(model.embeddings, "word_embeddings"):

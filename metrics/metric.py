@@ -167,9 +167,6 @@ TEXT_METRICS = {
     "t/snum": PrintMetric(TextMetricsConst.GT_STAT_NUM_SEN, "f", 0, MartPrintGroupConst.TEXT, None),
 }
 
-
-# ---------- Metric handlers ----------
-
 class MetricsWriter:
     """
     Manager to store training and validation metrics.

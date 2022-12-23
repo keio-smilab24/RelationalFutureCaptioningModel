@@ -260,34 +260,7 @@ class TypedNamedTuple(BaseModel):
         # allow torch tensors etc.
         arbitrary_types_allowed = True
 
-
-# ---------- ConstantHolder: Container for constants ----------
-
-class _StringRepr(type):
-    """
-    Metaclass for overwriting result of str(Class).
-    """
-
-    def __str__(cls) -> str:
-        """
-        When calling str(Class), call Class._get_string_repr method.
-
-        Returns:
-            Custom class string representation.
-        """
-        return cls._get_string_repr()  # pylint: disable=no-value-for-parameter
-
-    def _get_string_repr(cls) -> str:
-        """
-        Override this to return string representation of the class.
-
-        Returns:
-            Class representation as string.
-        """
-        raise NotImplementedError
-
-
-class ConstantHolder(metaclass=_StringRepr):
+class ConstantHolder:
     """
     Class to hold constants. Attributes must be uppercase. Cannot be instanced.
 
@@ -325,6 +298,24 @@ class ConstantHolder(metaclass=_StringRepr):
     _keys: Dict[str, List[str]] = {"ConstantHolder": []}
     _values: Dict[str, List[Any]] = {"ConstantHolder": []}
     _dict: Dict[str, Dict[str, Any]] = {"ConstantHolder": {}}
+
+    def __str__(cls) -> str:
+        """
+        When calling str(Class), call Class._get_string_repr method.
+
+        Returns:
+            Custom class string representation.
+        """
+        return cls._get_string_repr()  # pylint: disable=no-value-for-parameter
+
+    def _get_string_repr(cls) -> str:
+        """
+        Override this to return string representation of the class.
+
+        Returns:
+            Class representation as string.
+        """
+        raise NotImplementedError
 
     # ---------- Public interface ----------
     @classmethod
