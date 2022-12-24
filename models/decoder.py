@@ -10,12 +10,15 @@ class DecoderLayer(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.attention = MultiHeadAttention(cfg)
-        self.output = TrmFeedForward(cfg)
-        self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
-        self.rand = torch.randn(1, requires_grad=True).cuda()
-        self.rand_z = torch.randn(1, requires_grad=True).cuda()
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
+        
+        # attention
+        self.attention = MultiHeadAttention(cfg)
+        self.rand = torch.randn(1, requires_grad=True).cuda()
+        
+        # ffn
+        self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
+        self.rand_z = torch.randn(1, requires_grad=True).cuda()
 
     def forward(
         self,

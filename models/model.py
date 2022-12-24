@@ -124,6 +124,8 @@ class RecursiveTransformer(nn.Module):
         # 再構成用
         rec_feat = features[:,1,:].clone()
 
+        # img_feats, _ = self.RSAEncoder(img_feats)
+
         embeddings = self.embeddings(input_ids, features, token_type_ids)
         
         encoded_layer_outputs = self.TextEncoder(
@@ -267,13 +269,14 @@ class CrossAttention(nn.Module):
         target_feats = self.target_embedder(target_feats) # (B, 2or4, D)
 
         # cat target and objcet(of detection)
-        target_feats = torch.cat((target_feats, detection_feats), dim=1)
+        camera_feats = torch.cat((camera_feats, detection_feats), dim=1)
+        # target_feats = torch.cat((target_feats, detection_feats), dim=1)
 
         camera_feats = self.camera_encoder(hidden_states=camera_feats, source_kv=target_feats) #(B,4(2),D)
         target_feats = self.target_encoder(hidden_states=target_feats, source_kv=camera_feats) #(B,4(2),D)
 
         # concat
-        img_feats = torch.cat((camera_feats, target_feats), dim=1) #(B, 6(4), D)
+        img_feats = torch.cat((camera_feats[:,:4,:], target_feats), dim=1) #(B, 6(4), D)
 
         return img_feats
 

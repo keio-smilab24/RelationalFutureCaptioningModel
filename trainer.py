@@ -352,7 +352,7 @@ class Trainer:
         # set wandb
         self.use_wandb = use_wandb
         if use_wandb:
-            wandb_name = f"{datatype}_{self.cfg.max_t_len}_{self.cfg.max_v_len}_debug_make_knn_dstore"
+            wandb_name = f"cat_camera_x_object_feats"
             wandb.init(name=wandb_name, project="BilaS")
         
         # set start epoch and time & show log

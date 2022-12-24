@@ -1,8 +1,7 @@
 # for train
-for i in `seq 1`
+for seed in `seq 40 42`
 do
-    python train.py -c config/bilas_v6.yaml --datatype bilas --del_weights
-    python train.py -c config/bilas.yaml --datatype bilas --del_weights
+    python train.py -c config/bilas.yaml --datatype bilas -m 'ca_embedder=Base;random_seed='${seed} --wandb
 done
 # for test
 # python show_caption.py -m base

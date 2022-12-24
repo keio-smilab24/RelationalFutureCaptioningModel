@@ -26,7 +26,7 @@ class UniterImageEmbeddings(nn.Module):
         # tf naming convention for layer norm
         self.linear = nn.Linear(config.uniter_hidden_size, config.clip_dim)
         self.layer_norm = nn.LayerNorm(config.clip_dim, eps=1e-12)
-        self.drop_out = nn.Dropout(config.uniter_hidden_dropout_prob)
+        # self.drop_out = nn.Dropout(config.uniter_hidden_dropout_prob)
 
     def forward(self, img_feats, img_pos_feats, type_embeddings=None, img_masks=None):
         
@@ -44,7 +44,7 @@ class UniterImageEmbeddings(nn.Module):
         embeddings = transformed_img + transformed_pos
         embeddings = self.linear(embeddings)
         embeddings = self.layer_norm(embeddings)
-        embeddings = self.drop_out(embeddings)
+        # embeddings = self.drop_out(embeddings)
 
         return embeddings
 

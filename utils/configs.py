@@ -231,7 +231,7 @@ def update_config_from_args(config: Dict, args: argparse.Namespace, *, verbose: 
     # parse the --config inline modifier
     if args.modify_config is not None:
         # get all fields to update from the argument and loop them
-        update_fields: List[str] = args.modify_config.split(",")
+        update_fields: List[str] = args.modify_config.split(";")
         for field_value in update_fields:
             # get field and value
             fields_str, value = field_value.strip().split("=")
