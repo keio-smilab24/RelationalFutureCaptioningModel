@@ -29,13 +29,17 @@ from pycocoevalcap.meteor.meteor import Meteor
 from pycocoevalcap.rouge.rouge import Rouge
 from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
 
+from metrics.JaSPICE.jaspice import JaSPICE
+
+
 def parse_sent(sent, datatype: str='bila'):
     if datatype == 'bila':
         res = re.sub("[^a-zA-Z]", " ", sent)
         res = res.strip().lower().split()
         return res
-    elif datatype == 'bilas': 
-        return sent
+    elif datatype == 'bilas':
+        res = sent.strip().split()
+        return res
 
 
 def parse_para(para, datatype: str='bila'):
@@ -87,6 +91,7 @@ class CaptionEvaluator:
                 (met, "METEOR"),
                 (Rouge(), "ROUGE_L"),
                 (Cider(), "CIDEr"),
+                (JaSPICE(), "JaSPICE"),
             ]
         else:
             self.scorers = [(met, "METEOR")]
@@ -201,7 +206,16 @@ class CaptionEvaluator:
                     print(("computing %s score..." % (scorer.method())))
                 if method != "Self_Bleu":
                     try:
-                        score, scores = scorer.compute_score(gts, res)
+                        if method == "JaSPICE":
+                            scores = []
+                            for key in gts.keys():
+                                gt = gts[key]
+                                re = res[key]
+                                score = scorer(re, gt[0])
+                                scores.append(score)
+                            score = sum(scores)/len(gts)
+                        else:
+                            score, scores = scorer.compute_score(gts, res)
                     except (ValueError, FileNotFoundError, AttributeError) as e:
                         if isinstance(scorer, Meteor):
                             # if meteor crashes (java problems on certrain systems), report -999 score instead of dying.

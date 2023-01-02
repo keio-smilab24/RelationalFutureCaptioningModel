@@ -218,12 +218,13 @@ class RecursiveTransformer(nn.Module):
                 input_labels_list[idx].view(-1),
             )
             clip_loss = 0.0
-            clip_loss += self.cliploss(pred_reconst[idx], encoded_outputs_list[idx][0][:, self.cfg.max_v_len:, :])
+            clip_loss += self.cliploss(pred_reconst[idx], encoded_outputs_list[idx][0][:, -self.cfg.max_t_len:, :])
             if gt_rec is not None:
                 rec_loss = self.rec_loss(pred_reconst[idx].reshape(-1, 16, 16, 3), gt_reconst[idx] / 255.)
 
             # caption_loss += 15 * snt_loss + 500 * rec_loss + 4 * clip_loss
             caption_loss += 15 * loss_CE + 4 * clip_loss
+            # caption_loss +=  loss_CE
         caption_loss /= step_size
         return caption_loss, prediction_scores_list, loss_CE, rec_loss, clip_loss
 
@@ -277,6 +278,7 @@ class CrossAttention(nn.Module):
 
         # concat
         img_feats = torch.cat((camera_feats[:,:4,:], target_feats), dim=1) #(B, 6(4), D)
+        # img_feats = torch.cat((camera_feats, target_feats[:, :2, :]), dim=1) #(B, 6(4), D)
 
         return img_feats
 

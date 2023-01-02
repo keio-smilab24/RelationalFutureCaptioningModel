@@ -53,8 +53,8 @@ def cal_performance(pred, gt):
 
 
 # only log the important ones to console
-TRANSLATION_METRICS_LOG = ["Bleu_4", "METEOR", "ROUGE_L", "CIDEr", "re4"]
-
+# TRANSLATION_METRICS_LOG = ["Bleu_4", "METEOR", "ROUGE_L", "CIDEr", "re4"]
+TRANSLATION_METRICS_LOG = ["Bleu_4", "METEOR", "ROUGE_L", "CIDEr", "JaSPICE", "re4"]
 
 class Trainer:
     """
@@ -352,7 +352,7 @@ class Trainer:
         # set wandb
         self.use_wandb = use_wandb
         if use_wandb:
-            wandb_name = f"cat_camera_x_object_feats"
+            wandb_name = f"add_jspice_save_weights_modify_parse_sent"
             wandb.init(name=wandb_name, project="BilaS")
         
         # set start epoch and time & show log

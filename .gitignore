@@ -28,6 +28,11 @@ faiss/
 
 # ------ jaSPICE -----
 wnjpn.db
+metrics/JaSPICE/
+knp-4.20/
+juman*/
+juman*
+parsed.db
 
 
 # ---------- general
