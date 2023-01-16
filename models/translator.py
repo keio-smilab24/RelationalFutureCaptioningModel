@@ -173,7 +173,8 @@ class Translator(object):
 
                 if make_knn_dstore:
                     knn_keys = knn_feats[:, dec_idx, :] # (16, 768) <- (16, 63, 768)
-                    knn_vals = pred_scores[:, dec_idx, :].cpu().detach().numpy().copy() # (16, 291)
+                    # knn_vals = pred_scores[:, dec_idx, :].cpu().detach().numpy().copy() # (16, 291)
+                    knn_vals = pred_scores[:, dec_idx, :].detach().clone().cpu().numpy()
 
                     shape = knn_keys.shape
                     dstore_keys[self.dstore_idx:self.dstore_idx+shape[0]] = knn_keys
@@ -204,12 +205,19 @@ class Translator(object):
                     else:
                         knn_preds = torch.from_numpy(knn_preds)
                         knn_preds = self.make_knn_preds(knn_preds, torch.from_numpy(D))
-                        pred_scores = (1-alpha)*pred_scores[:,dec_idx] + alpha*knn_preds.to('cuda')
+                        pure_scores = torch.nn.functional.softmax(pred_scores[:, dec_idx], dim=1)
+                        pred_scores = (1-alpha)*pure_scores + alpha*knn_preds.to('cuda')
+                        if torch.argmax(pure_scores[0]) != torch.argmax(knn_preds[0]):
+                            print("-----------------------------")
+                            print("Dif pred argmax !!")
+                            print("-----------------------------")
+                        # pred_scores = (1-alpha)*pred_scores[:,dec_idx] + alpha*knn_preds.to('cuda')
                 
                 if do_knn:
                     next_words = pred_scores.max(1)[1]
                 else:
                     next_words = pred_scores[:, dec_idx].max(1)[1] # (B,)
+                
                 next_symbols = next_words
 
             # compute memory, mimic the way memory is generated at training time
@@ -258,13 +266,17 @@ class Translator(object):
         pred_idx = torch.argmax(knn_preds, dim=2) # (B,k,291) -> (B,k)
 
         # (2) 距離を温度Tで割る
-        distance = torch.exp(-(distance / self.cfg.knn_temperature))
+        # distance = torch.exp(-(distance / self.cfg.knn_temperature)) # -- 一番最初
+        # distance = torch.nn.functional.softmax(-(distance/self.cfg.knn_temperature), dim=1)
+        # distance = torch.nn.functional.softmax(-(distance/self.cfg.knn_temperature), dim=1)
+        # distance *= 100
+        distance = torch.nn.functional.softmax(torch.exp(-(distance / self.cfg.knn_temperature)), dim=1)
 
         # (3) knnの予測値を計算する 
         preds = torch.zeros((B, vocab_size))
         for b in range(B):
             for k in range(K):
-                preds[b][pred_idx[b][k]] = distance[b][k]
+                preds[b][pred_idx[b][k]] += distance[b][k]
         
         return preds
 

@@ -310,7 +310,11 @@ class Trainer:
             if self.load_model:
                 # load model from file. this would start training from epoch 0, but is usually only used for validation.
                 self.logger.info(f"Loading model from checkpoint file {self.load_model}")
-                self.model = torch.load(self.load_model)
+                if "ema" in self.load_model:
+                    self.model = torch.load(self.load_model)
+                    # self.model = load_ema_weghts(self.model, self.load_model)
+                else:
+                    self.model = torch.load(self.load_model)
             else:
                 # load model given an epoch. also reload metrics and optimization to correctly continue training.
                 self.logger.info(f"Loading Ep {self.load_ep}.")
@@ -352,7 +356,7 @@ class Trainer:
         # set wandb
         self.use_wandb = use_wandb
         if use_wandb:
-            wandb_name = f"add_jspice_save_weights_modify_parse_sent"
+            wandb_name = f"knn_proposed_clean_data"
             wandb.init(name=wandb_name, project="BilaS")
         
         # set start epoch and time & show log
@@ -375,6 +379,7 @@ class Trainer:
                 and self.cfg.ema_decay != -1
             ):
                 # originalのモデルにvalid(test)時に登録されるパラメータに更新
+                # つまり更新したパラメータを戻す
                 self.ema.resume(self.model)
             
             # monitor Nan
@@ -547,9 +552,11 @@ class Trainer:
                 print("###################################################")
 
             # save the EMA weights
-            if self.ema is not None:
-                ema_file = self.exp.get_models_file_ema(self.state.current_epoch)
-                torch.save(self.ema.state_dict(), str(ema_file))
+            # if self.ema is not None:
+            #     ema_file = self.exp.get_models_file_ema(self.state.current_epoch)
+            #     # torch.save(self.ema, str(ema_file))
+            #     # torch.save(self.ema.state_dict(), str(ema_file))
+            #     torch.save(self.model, str(ema_file))
 
             # post-epoch hook: scheduler, save checkpoint, time bookkeeping, feed tensorboard
             self.hook_post_train_and_val_epoch(do_val, is_best)
@@ -584,8 +591,9 @@ class Trainer:
         0. run inference, 1. Get METEOR, BLEU1-4, CIDEr scores, 2. Get vocab size, sentence length
         """
         if val_only:
-            self.ema = None
             self.use_wandb = False
+            if self.load_ep != -1:
+                self.ema = None
 
         # set timer
         self.timer_val_epoch = timer()
@@ -904,8 +912,9 @@ class Trainer:
                 custom metrics with translation results dictionary
         """
         if test_only:
-            self.ema = None
             self.use_wandb = False
+            if self.load_ep != -1:
+                self.ema = None
         
         # set timer
         self.timer_val_epoch = timer()
@@ -1122,6 +1131,11 @@ class Trainer:
                 [f"{name} {flat_metrics[name]:.2%}" for name in TRANSLATION_METRICS_LOG]
             )
         )
+
+        # save ema weights
+        if self.ema is not None:
+            ema_file = self.exp.get_models_file_ema(self.state.current_epoch)
+            torch.save(self.model, str(ema_file))
 
 
     def get_opt_state(self) -> Dict[str, Dict[str, nn.Parameter]]:
@@ -1473,9 +1487,9 @@ class Trainer:
         torch.save(self.model, str(models_file))
 
         # optimizer and scheduler
-        opt_file = self.exp.get_optimizer_file(self.state.current_epoch)
-        opt_state = self.get_opt_state()
-        torch.save(opt_state, str(opt_file))
+        # opt_file = self.exp.get_optimizer_file(self.state.current_epoch)
+        # opt_state = self.get_opt_state()
+        # torch.save(opt_state, str(opt_file))
 
     def _load_checkpoint(self, epoch) -> None:
         """

@@ -190,11 +190,12 @@ class EncoderLayer(nn.Module):
         # )
         # self.mmha = Attention(cfg)
         # self.mha = Attention(cfg)
-        self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
         self.attention = MultiHeadAttention(cfg)
         self.rand = torch.randn(1, requires_grad=True).cuda()
+        self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
         self.hidden_intermediate = Intermediate(cfg)
         self.rand_z = torch.randn(1, requires_grad=True).cuda()
+        self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
         # self.output = Output(cfg)
         # self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
 
@@ -207,22 +208,20 @@ class EncoderLayer(nn.Module):
         Returns:
         """
         max_v_len, max_t_len = self.cfg.max_v_len, self.cfg.max_t_len
-        # self-attention, need to shift right
-        shifted_self_mask = make_pad_shifted_mask(
-            attention_mask, max_v_len, max_t_len
-        )  # (N, L, L)
-        # attention_output = self.mmha(hidden_states, shifted_self_mask, clip_feats)
-        # attention_output = self.mha(attention_output)
+        
+        # self-attention, need to shift right # (N, L, L)
+        # make mask
+        shifted_self_mask = make_pad_shifted_mask(attention_mask, max_v_len, max_t_len)
+        
+        # attention layer
         tmp_x = hidden_states.clone().cuda()
-        hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.attention(hidden_states, shifted_self_mask, clip_feats)
         hidden_states = self.rand * tmp_x + (1 - self.rand) * hidden_states
-        tmp_x = hidden_states.clone().cuda()
         hidden_states = self.LayerNorm(hidden_states)
-        # intermediate_output = self.ffn(attention_output)
-        # intermediate_output = self.LayerNorm(intermediate_output)
-        # attention_output = self.LayerNorm(hidden_states)
+        
+        # ffn layer
+        tmp_x = hidden_states.clone().cuda()
         intermediate_output = self.hidden_intermediate(hidden_states)
-        layer_output = self.rand_z * tmp_x + (1 - self.rand_z) * intermediate_output
-        # intermediate_output = self.output(attention_output, hidden_states)
-        return layer_output
+        hidden_states = self.rand_z * tmp_x + (1 - self.rand_z) * intermediate_output
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states

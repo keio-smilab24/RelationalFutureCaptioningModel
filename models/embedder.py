@@ -166,7 +166,7 @@ class MultiModalEmbedding(nn.Module):
         self.token_type_embeddings = nn.Embedding(cfg.type_vocab_size, cfg.hidden_size)
 
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        self.dropout = nn.Dropout(cfg.hidden_dropout_prob)
+        # self.dropout = nn.Dropout(cfg.hidden_dropout_prob)
 
     def set_pretrained_embedding(self, pretrained_embedding, freeze=True):
         """
@@ -201,7 +201,7 @@ class MultiModalEmbedding(nn.Module):
             embeddings = self.position_embeddings(embeddings)
 
         embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings)
+        # embeddings = self.dropout(embeddings)
         return embeddings
 
 

@@ -27,6 +27,7 @@ def set_parser():
     parser.add_argument('--wandb', '-w', action="store_true")
     parser.add_argument('--show_log', '-l', action="store_true")
     parser.add_argument('--del_weights', '-dw', action="store_true")
+    parser.add_argument('--remove_not_final', action="store_true")
 
     # knn & test
     parser.add_argument('--test', action="store_true")

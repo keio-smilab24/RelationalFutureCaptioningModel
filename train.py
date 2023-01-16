@@ -2,6 +2,7 @@ import os
 import shutil
 import datetime
 import numpy as np
+from glob import glob
 
 from trainer import Trainer
 from models.model import create_model
@@ -82,7 +83,8 @@ def main():
         
         if args.do_knn:
             assert args.load_model is not None
-            print("\nDo Knn >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+            print('---------------------------------------------')
+            print('\033[31m', " Do Knn", '\033[0m')
             if args.validate:
                 trainer.validate_epoch(val_loader, datatype=args.datatype, do_knn=True, val_only=True)
             elif args.test:
@@ -113,6 +115,18 @@ def main():
             print('Pay Attention : Delete All Model weights ... ', end='')
             weights_dir = os.path.join(trainer.exp.path_base, "models")
             shutil.rmtree(weights_dir)
+            print('fin')
+
+        if args.remove_not_final:
+            print("Remove weights except final epoch...", end='')
+            weights_dir = os.path.join(trainer.exp.path_base, "models")
+            for kind in ["model", "modelema"]:
+                not_remove_path = weights_dir+"/"+kind+f"_{cfg.train.num_epochs-1}.pth"
+                paths = glob(weights_dir+"/"+kind+"_*.pth")
+                for path in paths:
+                    if path == not_remove_path:
+                        continue
+                    os.remove(path)
             print('fin')
 
         trainer.close()
