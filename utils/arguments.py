@@ -34,6 +34,9 @@ def set_parser():
     parser.add_argument('--make_knn_dstore', action="store_true")
     parser.add_argument('--do_knn', action="store_true")
 
+    # SAT
+    parser.add_argument('--sat', action="store_true")
+
     return parser.parse_args()
 
 

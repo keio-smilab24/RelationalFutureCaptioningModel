@@ -1138,6 +1138,25 @@ class Trainer:
             torch.save(self.model, str(ema_file))
 
 
+    def calc_sat(self, seed: int=42):
+        file_translation_raw = f"results/SAT/test_caption_{seed}.json"
+        reference_files = ['data/BilaS/caption_test.json']
+
+        print('------------------------------------------')
+        print('Read File ')
+        print("captions : ", file_translation_raw)
+        print("reference: ", reference_files)
+        print('------------------------------------------')
+
+        res_lang = evaluate_language_files(
+            file_translation_raw, reference_files, verbose=False, all_scorer=True, datatype="bilas"
+        )
+
+        print('Result For SAT')
+        print(res_lang)
+        print('------------------------------------------')
+
+
     def get_opt_state(self) -> Dict[str, Dict[str, nn.Parameter]]:
         """
         Return the current optimizer and scheduler state.

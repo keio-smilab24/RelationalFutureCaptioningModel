@@ -58,6 +58,10 @@ def main():
             load_epoch=args.load_epoch, load_model=args.load_model, is_test=(args.validate or args.test),
             data_dir=args.data_dir, show_log=args.show_log,)
 
+        if args.sat:
+            trainer.calc_sat(cfg.random_seed)
+            return
+
         # train/val/test related with knn
         if args.make_knn_dstore:
             assert args.load_model is not None
