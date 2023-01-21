@@ -13,6 +13,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+# from models.encoder import TransformerEncoder
 
 class UniterImageEmbeddings(nn.Module):
     def __init__(self, config, img_dim):
@@ -24,6 +25,7 @@ class UniterImageEmbeddings(nn.Module):
         self.mask_embedding = nn.Embedding(2, img_dim, padding_idx=0)
 
         # tf naming convention for layer norm
+        # self.encoder = TransformerEncoder(config)
         self.linear = nn.Linear(config.uniter_hidden_size, config.clip_dim)
         self.layer_norm = nn.LayerNorm(config.clip_dim, eps=1e-12)
         # self.drop_out = nn.Dropout(config.uniter_hidden_dropout_prob)
@@ -42,6 +44,8 @@ class UniterImageEmbeddings(nn.Module):
             embeddings = transformed_img + transformed_pos + type_embeddings
         
         embeddings = transformed_img + transformed_pos
+        # embeddings = self.encoder(embeddings, attention_mask=None)
+        # embeddings = self.linear(embeddings[-1])
         embeddings = self.linear(embeddings)
         embeddings = self.layer_norm(embeddings)
         # embeddings = self.drop_out(embeddings)

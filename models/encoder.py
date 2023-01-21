@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 
-from models.embedder import PositionEncoding
 from models.attentions import MultiHeadRSA, MultiHeadAttention
 from models.misc import FeedforwardNeuralNetModel, make_pad_shifted_mask, Intermediate
 
@@ -148,7 +147,6 @@ class CAEncoderLayer(nn.Module):
         return x
 
 
-
 class TransformerEncoder(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -211,11 +209,15 @@ class EncoderLayer(nn.Module):
         
         # self-attention, need to shift right # (N, L, L)
         # make mask
-        shifted_self_mask = make_pad_shifted_mask(attention_mask, max_v_len, max_t_len)
+        if attention_mask is not None:
+            shifted_self_mask = make_pad_shifted_mask(attention_mask, max_v_len, max_t_len)
         
         # attention layer
         tmp_x = hidden_states.clone().cuda()
-        hidden_states = self.attention(hidden_states, shifted_self_mask, clip_feats)
+        if attention_mask is not None:
+            hidden_states = self.attention(hidden_states, shifted_self_mask, clip_feats)
+        else:
+            hidden_states = self.attention(hidden_states)
         hidden_states = self.rand * tmp_x + (1 - self.rand) * hidden_states
         hidden_states = self.LayerNorm(hidden_states)
         

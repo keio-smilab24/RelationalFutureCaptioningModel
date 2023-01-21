@@ -16,14 +16,34 @@
 #     # python train.py -c config/bilas.yaml --datatype bilas -m 'ca_embedder=Base;random_seed='${seed} --make_knn_dstore --load_model results/proposed_K/seed${seed}/models/model_29.pth
     
 #     # do knn -- 3 parameter
-#     python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=8;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
-#     python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=16;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
-#     python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=32;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
-#     python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=64;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
-#     python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=128;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+#     python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=40;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+#     # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=16;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+#     # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=32;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+#     # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=64;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+#     # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=128;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
 #     # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.20;k_num=512;ca_embedder=Base;random_seed='${seed} --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
 #     # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=100;alpha=0.25;k_num=512;ca_embedder=Base;random_seed='${seed} --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
 # done
+
+for seed in `seq 40 44`
+do
+    # show seed
+    echo "--------------------------------"
+    echo ${seed}
+    echo "--------------------------------"
+    
+    # make dstore
+    # python train.py -c config/bilas.yaml --datatype bilas -m 'ca_embedder=Base;random_seed='${seed} --make_knn_dstore --load_model results/proposed_K/seed${seed}/models/model_29.pth
+    
+    # do knn -- 3 parameter
+    python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=10;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+    # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=16;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+    # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=32;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+    # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=64;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+    # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.25;k_num=128;ca_embedder=Base;random_seed='${seed}';dstore_keys_path=checkpoints/dstore_keys_'${seed}'.npy;dstore_vals_path=checkpoints/dstore_vals_'${seed}'.npy' --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+    # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=500;alpha=0.20;k_num=512;ca_embedder=Base;random_seed='${seed} --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+    # python train.py -c config/bilas.yaml --datatype bilas -m 'knn_temperature=100;alpha=0.25;k_num=512;ca_embedder=Base;random_seed='${seed} --load_model results/proposed_K/seed${seed}/models/model_29.pth --do_knn --test
+done
 
 # temp  : 100, 250, 500, 750, 1000, 2000
 # alpha : 0.1, 0.25, 0.45, 0.5, 0.65, 0.75
