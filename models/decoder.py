@@ -50,40 +50,42 @@ class DecoderLayer(nn.Module):
         x_1 = x.clone().cuda()
         att = self.attention(x=x_1, source_kv=clip_his)
         x_1 = self.rand*identity_x + (1 - self.rand)*att
-        x_1 = self.LayerNorm(x)
+        x_1 = self.LayerNorm(x_1)
 
+        """
         # self attention
         identity_x = x_1.clone().cuda()
         x_1 = self.selfmha(x_1)
         x_1 = self.rand2*identity_x + (1-self.rand2)*x_1
         x_1 = self.LayerNorm(x_1)
-
+        """
 
         # attention layer (img : q, text : kv)
         identity_clip_his = clip_his.clone().cuda()
-        x_2 = x.clone().cuda()
-        att = self.attention(x=clip_his, source_kv=x_2)
-        x_2 = self.rand*identity_clip_his + (1 - self.rand)*att
-        x_2 = self.LayerNorm(x_2)
+        att = self.attention(x=clip_his, source_kv=x)
+        clip_his = self.rand2*identity_clip_his + (1 - self.rand2)*att
+        clip_his = self.LayerNorm(clip_his)
 
+        """
         # self attention
         identity_x = x_2.clone().cuda()
         x_2 = self.selfmha(x_2)
         x_2 = self.rand2*identity_x + (1-self.rand2)*x_2
         x_2 = self.LayerNorm(x_2)
-
+        '"""
         # attention layer (x_1 : kv, x_2 : q)
         identity_x = x_1.clone().cuda()
-        att = self.attention(x=x_1, source_kv=x_2)
-        x = self.rand*identity_x + (1 - self.rand)*att
+        att = self.attention(x=x_1, source_kv=clip_his)
+        x = self.rand3*identity_x + (1 - self.rand3)*att
         x = self.LayerNorm(x)
 
+        """
         # self attention
         identity_x = x.clone().cuda()
         x = self.selfmha(x)
         x = self.rand2*identity_x + (1-self.rand2)*x
         x = self.LayerNorm(x)
-
+        """
 
         if make_knn_dstore: #最後の文字なら
             knn_feat = x.clone().detach().cpu()
