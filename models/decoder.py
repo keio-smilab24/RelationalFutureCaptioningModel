@@ -3,8 +3,8 @@ from torch import nn
 import torch.nn.functional as F
 
 from models.attentions import MultiHeadAttention
-from models.misc import FeedforwardNeuralNetModel, make_pad_shifted_mask
-
+from models.misc import FeedforwardNeuralNetModel, make_pad_shifted_mask, Intermediate
+from models.encoder import CrossAttentionEncoder
 
 class DecoderLayer(nn.Module):
     def __init__(self, cfg):
@@ -15,10 +15,18 @@ class DecoderLayer(nn.Module):
         # attention
         self.attention = MultiHeadAttention(cfg)
         self.rand = torch.randn(1, requires_grad=True).cuda()
+        self.rand2 = torch.randn(1, requires_grad=True).cuda()
 
         # ffn
         self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
         self.rand_z = torch.randn(1, requires_grad=True).cuda()
+
+        # self attention
+        self.selfmha = MultiHeadAttention(cfg)
+        self.rand3 = torch.randn(1, requires_grad=True).cuda()
+        self.linear2 = Intermediate(cfg)
+        self.rand_z2 = torch.randn(1, requires_grad=True).cuda()
+
 
     def forward(
         self,
@@ -27,11 +35,55 @@ class DecoderLayer(nn.Module):
         clip_his: torch.Tensor,
         make_knn_dstore: bool=False
         ):
-        # attention layer
+        """
+        # attention layer (default)
         identity_x = x.clone().cuda()
         att = self.attention(x=x, source_kv=clip_his)
         x = self.rand*identity_x + (1 - self.rand)*att
         x = self.LayerNorm(x)
+        """
+
+
+
+        # attention layer (img : kv, text : q)
+        identity_x = x.clone().cuda()
+        x_1 = x.clone().cuda()
+        att = self.attention(x=x_1, source_kv=clip_his)
+        x_1 = self.rand*identity_x + (1 - self.rand)*att
+        x_1 = self.LayerNorm(x)
+
+        # self attention
+        identity_x = x_1.clone().cuda()
+        x_1 = self.selfmha(x_1)
+        x_1 = self.rand2*identity_x + (1-self.rand2)*x_1
+        x_1 = self.LayerNorm(x_1)
+
+
+        # attention layer (img : q, text : kv)
+        identity_clip_his = clip_his.clone().cuda()
+        x_2 = x.clone().cuda()
+        att = self.attention(x=clip_his, source_kv=x_2)
+        x_2 = self.rand*identity_clip_his + (1 - self.rand)*att
+        x_2 = self.LayerNorm(x_2)
+
+        # self attention
+        identity_x = x_2.clone().cuda()
+        x_2 = self.selfmha(x_2)
+        x_2 = self.rand2*identity_x + (1-self.rand2)*x_2
+        x_2 = self.LayerNorm(x_2)
+
+        # attention layer (x_1 : kv, x_2 : q)
+        identity_x = x_1.clone().cuda()
+        att = self.attention(x=x_1, source_kv=x_2)
+        x = self.rand*identity_x + (1 - self.rand)*att
+        x = self.LayerNorm(x)
+
+        # self attention
+        identity_x = x.clone().cuda()
+        x = self.selfmha(x)
+        x = self.rand2*identity_x + (1-self.rand2)*x
+        x = self.LayerNorm(x)
+
 
         if make_knn_dstore: #最後の文字なら
             knn_feat = x.clone().detach().cpu()
@@ -42,7 +94,7 @@ class DecoderLayer(nn.Module):
         output = self.rand_z*identity_x + (1 - self.rand_z)*x
         output = self.LayerNorm(output)
 
-        if make_knn_dstore:
+        if make_knn_dstore: #最後の文字なら
             return output, knn_feat
 
         return output

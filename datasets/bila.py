@@ -38,7 +38,7 @@ def make_dict(train_caption_file, word2idx_filepath, datatype: str="bila"):
             word_list = nltk.tokenize.word_tokenize(sent)
             max_words = max(max_words, len(word_list))
             words.extend(word_list)
-    
+
     elif datatype == "bilas":
         train_caption_file = "data/BilaS/bilas_train_mecab.jsonl"
         word2idx_filepath = "data/BilaS/ponnet_word2idx.json"
@@ -153,17 +153,17 @@ class BilaDataset(data.Dataset):
             raise ValueError(
                 f"Mode must be [train, val] for {self.dataset_name}, got {mode}"
             )
-        
+
         if datatype == 'bila':
             self.word2idx_file = (
                 self.annotations_dir / self.dataset_name / "ponnet_word2idx.json"
             )
         elif datatype == "bilas":
             self.word2idx_file = Path(self.annotations_dir, "ponnet_word2idx.json")
-        
+
         if not os.path.exists(self.word2idx_file):
             make_dict(data_path, self.word2idx_file, datatype)
-        
+
         self.word2idx = json.load(self.word2idx_file.open("rt", encoding="utf8")) # 辞書 {word : ID(int)}
         self.idx2word = {int(v): k for k, v in list(self.word2idx.items())} # 逆
         print(f"WORD2IDX: {self.word2idx_file} len {len(self.word2idx)}")
@@ -176,7 +176,7 @@ class BilaDataset(data.Dataset):
                 raw_data = json.load(f)
             for line in tqdm(raw_data):
                 coll_data.append(line)
-        
+
         elif datatype == "bilas":
             with open(data_path) as f:
                 lines = f.readlines()
@@ -187,9 +187,9 @@ class BilaDataset(data.Dataset):
                     'sentence': line['parse_sentence'],
                 }
                 coll_data.append(raw_data)
-        
+
         self.data = coll_data
-        
+
         # map video id and clip id to clip number
         self.clip_nums = []
         for clip in tqdm(range(len(self.data))):
@@ -230,9 +230,9 @@ class BilaDataset(data.Dataset):
 
             bboxes = np.asarray(bbox_list)
             bbox_feats = np.asarray(bbox_feats_list)
-        
+
         return bboxes, bbox_feats
-    
+
     def _load_from_csv(self, file_path: str):
         """
         Summary:
@@ -272,14 +272,14 @@ class BilaDataset(data.Dataset):
         if self.datatype == "bila":
             data_dir = os.path.join("data", "BILA", "ponnet_data")
             frame = base_frame
-            
+
             img_list = []
             for _ in range(min(self.num_images,6)):
                 frame -= interval
                 img_path = os.path.join(data_dir, f"{frame:.1f}s_center_frames", raw_name+".png")
                 img = torch.from_numpy(cv2.imread(img_path).astype(np.float32)).clone()
                 img_list.insert(0, img)
-            
+
             rec_img = cv2.imread(os.path.join(data_dir, f"{frame:.1f}s_center_frames", raw_name+".png"))
             rec_img = cv2.resize(rec_img, dsize=(16, 16))
 
@@ -292,28 +292,28 @@ class BilaDataset(data.Dataset):
                 datapath = 'data/BilaS/bilas_train_mecab.jsonl'
             elif self.mode == "val":
                 datapath = 'data/BilaS/bilas_valid_mecab.jsonl'
-            
+
             if self.mode_bilas == 'test':
                 datapath = 'data/BilaS/bilas_test_mecab.jsonl'
-            
+
             df = pd.read_json(datapath, orient='records', lines=True)
             df_scene = df[df["setNum"] == int(setNum)]
             df_scene = df_scene[df_scene['scene']==int(scene)]
-            
+
             img_list_path = [
                 'image_rgb', 'image_depth', 'target_rgb', 'target_depth',
                 'attention_map_rgb', 'attention_map_depth'
             ]
-            
+
             img_list = []
             ponnet_path = Path('data/Ponnet')
             for idx in range(self.num_images):
                 img_path = str(Path(ponnet_path, df_scene[img_list_path[idx]].iloc[-1]))
-                
+
                 if img_list_path[idx] == "image_rgb":
                     rec_img = cv2.imread(img_path).astype(np.float32)
                     rec_img = cv2.resize(cv2.cvtColor(rec_img, cv2.COLOR_BGR2RGB), dsize=(16, 16))
-                
+
                 img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(224, 224))
                 if img_list_path[idx] != "attnetion_map_rgb":
                     img = img / 255.0
@@ -323,7 +323,7 @@ class BilaDataset(data.Dataset):
                 img_list.append(img)
 
         return img_list, rec_img
-    
+
     def normalize_img(self, img):
         """
         画像をnormalizeする
@@ -337,13 +337,13 @@ class BilaDataset(data.Dataset):
     def convert_example_to_features(self, example):
         """
         example single snetence
-        {   
+        {
             "clip_id": str,
             "duration": float,
             "timestamp": [st(float), ed(float)],
             "sentence": str
         } or
-        {   
+        {
             "clip_id": str,
             "duration": float,
             "timestamps": list([st(float), ed(float)]),
@@ -352,12 +352,12 @@ class BilaDataset(data.Dataset):
         """
         raw_name = example["clip_id"] # clip_id : VideoID/SceneID
         img_list, rec_img = self._load_ponnet_img_feature(raw_name)
-        
+
         bboxes, bbox_feats = self._load_bbox_feats(raw_name)
 
         single_features = []
         single_meta = []
-        
+
         # imageとtextを合わせた特徴やmask等の作成
         data, meta = self.clip_sentence_to_feature(
             example["clip_id"],
@@ -367,7 +367,7 @@ class BilaDataset(data.Dataset):
             bboxes,
             bbox_feats,
         )
-        
+
         single_features.append(data)
         single_meta.append(meta)
 
@@ -398,7 +398,7 @@ class BilaDataset(data.Dataset):
 
         # text用のtokenとmaskを作成
         text_tokens, text_mask = self._tokenize_pad_sentence(sentence)
-        
+
         # img_tokenとtext_tokenを連結
         input_tokens = video_tokens + text_tokens
 
@@ -433,7 +433,7 @@ class BilaDataset(data.Dataset):
             bbox_feats=bbox_feats.astype(np.float32),
         )
         meta = dict(name=name, sentence=sentence)
-        
+
         return data, meta
 
 
@@ -448,18 +448,18 @@ class BilaDataset(data.Dataset):
         Args:
             img_list: 画像の特徴量を格納したリスト
         """
-        
+
         # VIDEO_TOKEN : CLS, VID, ..., VID, SEP
         video_tokens = (
             [self.CLS_TOKEN]
             + [self.VID_TOKEN] * (self.max_v_len - 2)
             + [self.SEP_TOKEN]
         )
-        
+
         # VIDEO関連のトークン部分を1とするmaskを作成
         # TODO : 質問ver3.4
         mask = [1] * self.max_v_len
-        
+
         # img / text の特徴量を作成
         img_feats = np.zeros((self.max_v_len-2, *img_list[0].shape))
         txt_feats = np.zeros((self.max_t_len, self.clip_dim))
@@ -479,12 +479,12 @@ class BilaDataset(data.Dataset):
         # token作成
         text_tokens = nltk.tokenize.word_tokenize(sentence.lower())[: self.max_t_len - 2]
         text_tokens = [self.BOS_TOKEN] + text_tokens + [self.EOS_TOKEN]
-        
+
         # 不足分はPADを追加
         num_words = len(text_tokens)
         mask = [1] * num_words + [0] * (self.max_t_len - num_words)
         text_tokens += [self.PAD_TOKEN] * (self.max_t_len - num_words)
-        
+
         return text_tokens, mask
 
     def convert_ids_to_sentence(
@@ -533,7 +533,7 @@ class BilaDataset(data.Dataset):
         batch = [e[0] for e in batch]
         # Step1: pad each example to max_n_sen
         max_n_sen = max([len(e) for e in batch]) # 1
-        
+
         raw_step_sizes = []
         padded_batch = []
         padding_clip_sen_data = copy.deepcopy(batch[0][0]) # doesn"t matter which one is used
@@ -568,10 +568,10 @@ def pad_tensors(key, inputs, lens=None, pad=0):
     if lens is None:
         lens = [e.shape[0] for e in inputs]
     max_len = max(lens)
-    
+
     # batch_size
     bs = len(inputs)
-    
+
     # 配列の作成
     dim = inputs[0].shape[-1]
     dtype = inputs[0].dtype
@@ -580,7 +580,7 @@ def pad_tensors(key, inputs, lens=None, pad=0):
         output.data.fill_(pad)
     for i, (t, l) in enumerate(zip(inputs, lens)):
         output[i, :l, :] = t.data
-    
+
     if key == "bbox_feats":
         return torch.from_numpy(output)
     if key == "bboxes":
