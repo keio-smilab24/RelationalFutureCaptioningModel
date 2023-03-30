@@ -94,7 +94,7 @@ class Trainer:
         show_log: bool = False,
     ):
         assert "_" not in run_name, f"Run name {run_name} must not contain underscores."
-        
+
         self.model = model
 
         # knn
@@ -130,29 +130,29 @@ class Trainer:
         else:
             self.logger = logger
             self.log_level = self.logger.level
-        
+
         # setup devices
         cudnn.enabled = self.cfg.cudnn_enabled
         if not self.cfg.use_cuda:
             self.cfg.fp16_train = False
-        
+
         # setup grad scaler if needed for fp16
         self.grad_scaler: Optional[GradScaler] = None
         if self.cfg.fp16_train:
             self.grad_scaler: Optional[GradScaler] = GradScaler()
-        
+
         # logs some infos
         if show_log:
             self.logger.info(f"Running on cuda: {self.cfg.use_cuda} "
                                 f"gpus found: {torch.cuda.device_count()}, fp16 amp: {self.cfg.fp16_train}.")
-        
+
         # move models to cuda
         if self.cfg.use_cuda:
             if not torch.cuda.is_available():
                 raise RuntimeError(
                     "CUDA requested but not available! Use --no_cuda to run on CPU.")
             model = model.cuda()
-        
+
         # create metrics writer
         self.metrics = metric.MetricsWriter(self.exp)
 
@@ -161,17 +161,17 @@ class Trainer:
 
         # 使用したconfig fileを保存
         dump_yaml_config_file(self.exp.path_base / 'config.yaml', self.cfg.config_orig)
-        
+
         # setup automatic checkpoint loading. this will be parsed in self.hook_post_init()
         ep_nums = self.exp.get_existing_checkpoints()
         self.load = False
         self.load_ep = -1
         self.load_model = load_model
-        
+
         if self.load_model:
             assert not load_epoch, ("When given filepath with load_model, --load_epoch must not be set.")
             self.load = True
-        
+
         # automatically find best epoch otherwise
         elif len(ep_nums) > 0:
             if load_epoch:
@@ -196,7 +196,7 @@ class Trainer:
                 self.load = True
         else:
             self.logger.info("No checkpoints found, starting from scratch.")
-        
+
         # Per-epoch metrics where the average is not important.
         self.metrics.add_meter(Metrics.TRAIN_EPOCH, use_avg=False)
         self.metrics.add_meter(Metrics.TIME_TOTAL, use_avg=False)
@@ -240,7 +240,7 @@ class Trainer:
         self.timedelta_step_forward: float = 0
         self.timedelta_step_backward: float = 0
         self.steps_per_epoch: int = 0
-        
+
         # ---------- additional metrics ----------
         # train loss and accuracy
         self.metrics.add_meter(MMeters.TRAIN_LOSS_PER_WORD, use_avg=False)
@@ -334,7 +334,7 @@ class Trainer:
         # disable ema when loading model directly or when decay is 0 / -1
         if self.load_model or cfg.ema_decay <= 0:
             self.ema = None
-        
+
         if is_test:
             self.ema = None
 
@@ -352,13 +352,13 @@ class Trainer:
         use_wandb: bool = False,
         show_log: bool = False,
     ) -> None:
-        
+
         # set wandb
         self.use_wandb = use_wandb
         if use_wandb:
             wandb_name = f"knn_proposed_clean_data"
             wandb.init(name=wandb_name, project="BilaS")
-        
+
         # set start epoch and time & show log
         self.state.start_epoch = self.state.current_epoch
         self.timer_train_start = timer()
@@ -366,8 +366,8 @@ class Trainer:
             self.logger.info(f"Training from {self.state.current_epoch} to {self.cfg.train.num_epochs}")
             self.logger.info("Training Models on devices " + ", ".join([
                 f"{key}: {next(val.parameters()).device}" for key, val in self.model_mgr.model_dict.items()]))
-        
-        
+
+
         for _epoch in tqdm(range(self.state.current_epoch, self.cfg.train.num_epochs)):
             # set time & clear metric
             self.hook_pre_train_epoch(show_log)
@@ -381,7 +381,7 @@ class Trainer:
                 # originalのモデルにvalid(test)時に登録されるパラメータに更新
                 # つまり更新したパラメータを戻す
                 self.ema.resume(self.model)
-            
+
             # monitor Nan
             torch.autograd.set_detect_anomaly(True)
 
@@ -454,7 +454,7 @@ class Trainer:
                     batch_snt_loss += snt_loss
                     batch_rec_loss += rec_loss
                     batch_clip_loss += clip_loss
-                
+
                 # set time
                 self.timer_step_backward = timer()
                 self.timedelta_step_forward = self.timer_step_backward - self.timer_step_forward
@@ -481,7 +481,7 @@ class Trainer:
                             self.model.parameters(), self.cfg.train.clip_gradient
                         )
                     self.optimizer.step()
-                
+
                 # 指数移動平均を計算し、emaに登録
                 if self.ema is not None:
                     self.ema(self.model, self.state.total_step)
@@ -490,7 +490,7 @@ class Trainer:
                 total_loss += loss.item()
                 n_correct = 0
                 n_word = 0
-                
+
                 for pred, gt in zip(pred_scores_list, input_labels_list):
                     n_correct += cal_performance(pred, gt)
                     valid_label_mask = gt.ne(BilaDataset.IGNORE)
@@ -523,13 +523,13 @@ class Trainer:
             accuracy = 1.0 * n_word_correct / n_word_total
             self.metrics.update_meter(MMeters.TRAIN_LOSS_PER_WORD, loss_per_word)
             self.metrics.update_meter(MMeters.TRAIN_ACC, accuracy)
-            
+
             # return loss_per_word, accuracy
             batch_loss /= num_steps
             batch_snt_loss /= num_steps
             batch_rec_loss /= num_steps
             batch_clip_loss /= num_steps
-            
+
             if self.use_wandb:
                 wandb.log({"train_loss": batch_loss})
                 wandb.log({"train_snt_loss": batch_snt_loss})
@@ -545,7 +545,7 @@ class Trainer:
                 _val_loss, _val_score, is_best, _metrics = self.validate_epoch(
                     val_loader, datatype=datatype
                 )
-                
+
                 print("#############################################")
                 print("Do test")
                 self.test_epoch(test_loader, datatype=datatype)
@@ -567,14 +567,14 @@ class Trainer:
                             f"{self.state.time_total:.3f}s ({self.state.time_total - self.state.time_val:.3f}s "
                             f"train / {self.state.time_val:.3f}s val)")
         print("###################################################")
-        
+
         self.logger.info(
             ", ".join([f"{name} {self.higest_test[name]:.2%}" for name in self.test_metrics]))
 
 
     @torch.no_grad()
     def validate_epoch(
-        self, data_loader: data.DataLoader, 
+        self, data_loader: data.DataLoader,
         datatype: str="bila",
         make_knn_dstore: bool=False,
         do_knn: bool=False,
@@ -598,7 +598,7 @@ class Trainer:
         # set timer
         self.timer_val_epoch = timer()
         self.timer_step = timer()
-        
+
         dataset: BilaDataset = data_loader.dataset
         forward_time_total = 0
         total_loss = 0
@@ -629,7 +629,7 @@ class Trainer:
         for _step, batch in enumerate(data_loader):
             # set timer
             self.timer_step_forward = timer()
-            
+
             with autocast(enabled=self.cfg.fp16_val):
                 # input to cuda
                 batched_data = [
@@ -640,7 +640,7 @@ class Trainer:
                     )
                     for step_data in batch[0]
                 ]
-                
+
                 # validate (ground truth as input for next token)
                 input_ids_list = [e["input_ids"] for e in batched_data]
                 img_feats_list = [e['img_feats'] for e in batched_data]
@@ -668,7 +668,7 @@ class Trainer:
                 batch_rec_loss += rec_loss
                 batch_clip_loss += clip_loss
                 batch_idx += 1
-                
+
                 # translate (no ground truth text)
                 step_sizes = batch[1]  # list(int), len == bsz
                 meta = batch[2]  # list(dict), len == bsz
@@ -722,7 +722,7 @@ class Trainer:
             # end of step
             self.timer_step_backward = timer()
             self.timedelta_step_forward = self.timer_step_backward - self.timer_step_forward
-            
+
             forward_time_total += self.timedelta_step_forward
             num_steps += 1
 
@@ -754,7 +754,7 @@ class Trainer:
             eval_mode = "train"
         else:
             eval_mode = self.cfg.dataset_val.split
-        
+
         file_translation_raw = self.exp.get_translation_files(
             self.state.current_epoch, eval_mode, make_knn_dstore=make_knn_dstore,
         )
@@ -915,7 +915,7 @@ class Trainer:
             self.use_wandb = False
             if self.load_ep != -1:
                 self.ema = None
-        
+
         # set timer
         self.timer_val_epoch = timer()
         self.timer_step = timer()
@@ -1041,7 +1041,7 @@ class Trainer:
             # end of step
             self.timer_step_backward = timer()
             self.timedelta_step_forward = self.timer_step_backward - self.timer_step_forward
-            
+
             forward_time_total += self.timedelta_step_forward
             num_steps += 1
 
@@ -1071,10 +1071,10 @@ class Trainer:
             self.state.current_epoch, "test"
         )
         if datatype == "bila":
-            json.dump(batch_res, file_translation_raw.open("wt", encoding="utf8"))    
+            json.dump(batch_res, file_translation_raw.open("wt", encoding="utf8"))
         elif datatype == 'bilas':
             json.dump(batch_res, file_translation_raw.open("wt", encoding="utf8"), ensure_ascii=False)
-        
+
         # get reference files (ground truth captions)
         reference_files_map = get_reference_files(
             self.cfg.dataset_val.name, self.exp.data_dir, test=True, datatype=datatype,
@@ -1123,7 +1123,7 @@ class Trainer:
         )
         if self.use_wandb:
             wandb.log({"test_BLEU4": flat_metrics["Bleu_4"], "test_METEOR": flat_metrics["METEOR"], "test_ROUGE_L": flat_metrics["ROUGE_L"], "test_CIDEr": flat_metrics["CIDEr"]})
-        
+
         self.test_metrics = TRANSLATION_METRICS_LOG
         self.higest_test = flat_metrics
         self.logger.info(

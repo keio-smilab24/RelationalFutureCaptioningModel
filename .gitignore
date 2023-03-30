@@ -25,6 +25,7 @@ results/
 checkpoints/
 cmake-3.25.0/
 faiss/
+temp.sh
 
 # ------ jaSPICE -----
 wnjpn.db

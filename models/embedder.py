@@ -25,7 +25,7 @@ class BaseEmbedder(nn.Module):
         if cfg.fix_emb:
             for params in self.resnet.parameters():
                 params.requires_grad = False
-        
+
         for params in self.clip.parameters():
             params.requires_grad = False
 
@@ -33,7 +33,7 @@ class BaseEmbedder(nn.Module):
         B,L,H,W,C = x.size()
         x = x.view(-1, C, H, W)
         clip_x = x.clone().cuda()
-        
+
         x = self.resnet.conv1(x)
         x = self.resnet.bn1(x)
         x = self.resnet.relu(x)
@@ -43,10 +43,10 @@ class BaseEmbedder(nn.Module):
         x = self.conv2(x)
         x = self.conv3(x)
         x = x.view(B, L, -1)
-        
+
         clip_x = self.clip.encode_image(clip_x).float()
         clip_x = self.clip_linear(clip_x).view(B, L, -1)
-        
+
         x = x + clip_x
 
         return x
@@ -66,7 +66,7 @@ class ResEmbedder(nn.Module):
         if cfg.fix_emb:
             for params in self.resnet.parameters():
                 params.requires_grad = False
-        
+
         for params in self.clip.parameters():
             params.requires_grad = False
 
@@ -102,7 +102,7 @@ class CLIPEmbedder(nn.Module):
         if cfg.fix_emb:
             for params in self.clip_img_encoder.parameters():
                 params.requires_grad = False
-    
+
     def forward(self, x:torch.Tensor):
         B,L,H,W,C = x.shape
         x = x.view(B*L,C,H,W)
@@ -117,9 +117,9 @@ class ConvNeXtEmbedder(nn.Module):
         super(ConvNeXtEmbedder, self).__init__()
 
         self.convnext = ConvNeXt()
-    
+
     def forward(self, x: torch.Tensor):
-        B, L, _ = x.size()
+        B, L, _, E, S = x.size()
         x = x.view(-1, 3, 224, 224)
         x = self.convnext(x)
         x = x.view(size=(B, L, -1))
@@ -147,7 +147,7 @@ class MultiModalEmbedding(nn.Module):
         self.word_embeddings = nn.Embedding(
             cfg.vocab_size, cfg.word_vec_size, padding_idx=0
         )
-        
+
         self.word_fc = nn.Sequential(
             nn.LayerNorm(cfg.word_vec_size, eps=cfg.layer_norm_eps),
             nn.Dropout(cfg.hidden_dropout_prob),
@@ -193,7 +193,7 @@ class MultiModalEmbedding(nn.Module):
         words_embeddings = self.word_fc(self.word_embeddings(input_ids))
         img_embeddings = self.img_embeddings(img_feats)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-        
+
         # words_embeddings += token_type_embeddings
         embeddings = words_embeddings + img_embeddings + token_type_embeddings
 

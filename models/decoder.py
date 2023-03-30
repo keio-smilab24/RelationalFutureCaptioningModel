@@ -11,11 +11,11 @@ class DecoderLayer(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        
+
         # attention
         self.attention = MultiHeadAttention(cfg)
         self.rand = torch.randn(1, requires_grad=True).cuda()
-        
+
         # ffn
         self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
         self.rand_z = torch.randn(1, requires_grad=True).cuda()
@@ -33,9 +33,9 @@ class DecoderLayer(nn.Module):
         x = self.rand*identity_x + (1 - self.rand)*att
         x = self.LayerNorm(x)
 
-        if make_knn_dstore:
+        if make_knn_dstore: #最後の文字なら
             knn_feat = x.clone().detach().cpu()
-        
+
         # ffn
         identity_x = x.clone().cuda()
         x = self.ffn(x)
@@ -44,7 +44,7 @@ class DecoderLayer(nn.Module):
 
         if make_knn_dstore:
             return output, knn_feat
-        
+
         return output
 
 
@@ -72,7 +72,7 @@ class TransformerDecoder(nn.Module):
             else:
                 hidden_states = layer(hidden_states, attention_mask, clip_his)
             all_layer_outputs.append(hidden_states)
-        
+
         if make_knn_dstore:
             return all_layer_outputs, knn_feats
         else:
@@ -122,7 +122,7 @@ class PredictionHead(nn.Module):
         super().__init__()
         self.transform = PredictionHeadTransform(cfg)
 
-        # The output weights are the same as the input embeddings, 
+        # The output weights are the same as the input embeddings,
         # but there is　an output-only bias for each token.
         if cfg.share_wd_cls_weight:
             assert bert_model_embedding_weights is not None, (

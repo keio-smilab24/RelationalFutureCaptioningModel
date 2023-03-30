@@ -29,7 +29,7 @@ from pycocoevalcap.meteor.meteor import Meteor
 from pycocoevalcap.rouge.rouge import Rouge
 from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
 
-from metrics.JaSPICE.jaspice import JaSPICE
+from metrics.JaSPICE.jaspice.api import JaSPICE
 
 
 def parse_sent(sent, datatype: str='bila'):
@@ -83,7 +83,7 @@ class CaptionEvaluator:
         except (AttributeError, FileNotFoundError) as e:
             print(f"Meteor couldn't start due to {e}")
             met = None
-        
+
         # jaSPICEはここ
         if self.verbose or self.all_scorer:
             self.scorers = [
@@ -168,13 +168,13 @@ class CaptionEvaluator:
         gt_vid_ids = self.get_gt_vid_ids()
         vid2idx = {k: i for i, k in enumerate(gt_vid_ids)}
         gts = {vid2idx[k]: [] for k in gt_vid_ids}
-        
+
         for i, gt in enumerate(self.ground_truths):
             for k in gt_vid_ids:
                 if k not in gt:
                     continue
                 gts[vid2idx[k]].append(" ".join(parse_sent(gt[k], datatype=datatype)))
-        
+
         res = {
             vid2idx[k]: [" ".join(parse_sent(self.prediction[k], datatype=datatype))]
             if k in self.prediction and len(self.prediction[k]) > 0
@@ -204,6 +204,7 @@ class CaptionEvaluator:
             else:
                 if self.verbose:
                     print(("computing %s score..." % (scorer.method())))
+                """
                 if method != "Self_Bleu":
                     try:
                         if method == "JaSPICE":
@@ -231,7 +232,8 @@ class CaptionEvaluator:
                         score = -999
                         scores = [-999] * len(gts)
                 else:
-                    score, scores = scorer.compute_score(gts, para_res)
+                """
+                score, scores = scorer.compute_score(gts, para_res)
             scores = np.asarray(scores)
 
             if type(method) == list:
