@@ -60,6 +60,13 @@ class DecoderLayer(nn.Module):
         x_1 = self.rand*identity_x_1 + (1 - self.rand)*att
         x_1 = self.LayerNorm(x_1)
 
+        #self attention
+        identity_x_1 = x_1.clone().cuda()
+        att = self.selfmha(x_1)
+        x_1 = self.rand4*identity_x_1 + (1 - self.rand4)*att
+        x_1 = self.LayerNorm(x_1)
+
+
         # attention layer (img : q, text : kv)
         identity_clip_his = clip_his.clone().cuda()
         att = self.attention2(x=clip_his, source_kv=x)
