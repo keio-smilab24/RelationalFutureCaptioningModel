@@ -11,21 +11,28 @@ class DecoderLayer(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
+        self.LayerNorm2 = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
+        self.LayerNorm3 = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
 
-        # attention
+        # cross attention
         self.attention = MultiHeadAttention(cfg)
+        self.attention2 = MultiHeadAttention(cfg)
+        self.attention3 = MultiHeadAttention(cfg)
         self.rand = torch.randn(1, requires_grad=True).cuda()
         self.rand2 = torch.randn(1, requires_grad=True).cuda()
+        self.rand3 = torch.randn(1, requires_grad=True).cuda()
 
         # ffn
         self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
         self.rand_z = torch.randn(1, requires_grad=True).cuda()
+        self.rand_z2 = torch.randn(1, requires_grad=True).cuda()
+        self.rand_z3 = torch.randn(1, requires_grad=True).cuda()
 
         # self attention
         self.selfmha = MultiHeadAttention(cfg)
-        self.rand3 = torch.randn(1, requires_grad=True).cuda()
         self.linear2 = Intermediate(cfg)
-        self.rand_z2 = torch.randn(1, requires_grad=True).cuda()
+        self.rand4 = torch.randn(1, requires_grad=True).cuda()
+        # self.rand_z2 = torch.randn(1, requires_grad=True).cuda()
 
 
     def forward(
@@ -35,6 +42,7 @@ class DecoderLayer(nn.Module):
         clip_his: torch.Tensor,
         make_knn_dstore: bool=False
         ):
+
         """
         # attention layer (default)
         identity_x = x.clone().cuda()
@@ -44,56 +52,33 @@ class DecoderLayer(nn.Module):
         """
 
 
+        x_1 = x.clone().cuda() #2.2918e+00,  1.6779e+00, -6.9854e-01,  ...,  3.8914e-01, -4.6741e-01, -4.8534e-01
 
         # attention layer (img : kv, text : q)
-        identity_x = x.clone().cuda()
-        x_1 = x.clone().cuda()
+        identity_x_1 = x_1.clone().cuda()
         att = self.attention(x=x_1, source_kv=clip_his)
-        x_1 = self.rand*identity_x + (1 - self.rand)*att
+        x_1 = self.rand*identity_x_1 + (1 - self.rand)*att
         x_1 = self.LayerNorm(x_1)
-
-        """
-        # self attention
-        identity_x = x_1.clone().cuda()
-        x_1 = self.selfmha(x_1)
-        x_1 = self.rand2*identity_x + (1-self.rand2)*x_1
-        x_1 = self.LayerNorm(x_1)
-        """
 
         # attention layer (img : q, text : kv)
         identity_clip_his = clip_his.clone().cuda()
-        att = self.attention(x=clip_his, source_kv=x)
+        att = self.attention2(x=clip_his, source_kv=x)
         clip_his = self.rand2*identity_clip_his + (1 - self.rand2)*att
-        clip_his = self.LayerNorm(clip_his)
+        clip_his = self.LayerNorm2(clip_his)
 
-        """
-        # self attention
-        identity_x = x_2.clone().cuda()
-        x_2 = self.selfmha(x_2)
-        x_2 = self.rand2*identity_x + (1-self.rand2)*x_2
-        x_2 = self.LayerNorm(x_2)
-        '"""
         # attention layer (x_1 : kv, x_2 : q)
-        identity_x = x_1.clone().cuda()
-        att = self.attention(x=x_1, source_kv=clip_his)
-        x = self.rand3*identity_x + (1 - self.rand3)*att
-        x = self.LayerNorm(x)
-
-        """
-        # self attention
-        identity_x = x.clone().cuda()
-        x = self.selfmha(x)
-        x = self.rand2*identity_x + (1-self.rand2)*x
-        x = self.LayerNorm(x)
-        """
+        identity_x_1 = x_1.clone().cuda()
+        att = self.attention3(x=x_1, source_kv=clip_his)
+        x = self.rand3*identity_x_1 + (1 - self.rand3)*att
+        x = self.LayerNorm2(x)
 
         if make_knn_dstore: #最後の文字なら
             knn_feat = x.clone().detach().cpu()
 
         # ffn
-        identity_x = x.clone().cuda()
-        x = self.ffn(x)
-        output = self.rand_z*identity_x + (1 - self.rand_z)*x
+        identity_x_1 = x_1.clone().cuda()
+        x_1 = self.ffn(x_1)
+        output = self.rand_z*identity_x_1 + (1 - self.rand_z)*x_1
         output = self.LayerNorm(output)
 
         if make_knn_dstore: #最後の文字なら
