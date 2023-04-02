@@ -66,6 +66,11 @@ class DecoderLayer(nn.Module):
         x_1 = self.rand*identity_x_1 + (1 - self.rand)*att
         x_1 = self.LayerNorm(x_1)
 
+        # second attention layer (img : kv, text : q)
+        identity_x_1 = x_1.clone().cuda()
+        att = self.attention(x=x_1, source_kv=clip_his)
+        x_1 = self.rand*identity_x_1 + (1 - self.rand)*att
+        x_1 = self.LayerNorm(x_1)    
 
         """
         # attention layer (img : q, text : kv)
