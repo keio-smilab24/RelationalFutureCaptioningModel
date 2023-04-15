@@ -52,33 +52,28 @@ class DecoderLayer(nn.Module):
         """
 
 
-        x_1 = x
+        
         # attention layer (img : kv, text : q)
-        identity_x_1 = x_1
-        att = self.attention(x=x_1, source_kv=clip_his)
-        x_1 = self.rand*identity_x_1 + (1 - self.rand)*att
-        x_1 = self.LayerNorm(x_1)
+        att = self.attention(x=x, source_kv=clip_his)
+        x_text = x + att
 
         # attention layer (img : q, text : kv)
-        identity_clip_his = clip_his
         att = self.attention2(x=clip_his, source_kv=x)
-        clip_his = self.rand2*identity_clip_his + (1 - self.rand2)*att
-        clip_his = self.LayerNorm(clip_his)
+        x_img = clip_his + att
 
         # attention layer (x_1 : kv, x_2 : q)
-        identity_x_1 = x_1
-        att = self.attention3(x=x_1, source_kv=clip_his)
-        x = self.rand3*identity_x_1 + (1 - self.rand3)*att
-        x = self.LayerNorm(x)
+        att = self.attention3(x=x_text, source_kv=x_img)
+        x_text = x_text + att
+        x = self.LayerNorm(x_text)
 
 
         if make_knn_dstore: #最後の文字なら
-            knn_feat = x_1.clone().detach().cpu()
+            knn_feat = x.clone().detach().cpu()
 
         # ffn
-        identity_x_1 = x_1.clone().cuda()
-        x_1 = self.ffn(x_1)
-        output = self.rand_z*identity_x_1 + (1 - self.rand_z)*x_1
+        identity_x = x.clone().cuda()
+        x = self.ffn(x)
+        output = self.rand_z*identity_x + (1 - self.rand_z)*x
         output = self.LayerNorm(output)
 
         if make_knn_dstore: #最後の文字なら
