@@ -84,7 +84,7 @@ class DecoderLayer(nn.Module):
         x_img2 = self.dropout4(x_img2)
         x_img2 = x_img2 + q4
         x_img2 = self.LayerNorm4(x_img2)
-        """
+        
         # tird layer 
         q5 = x_text2
         kv5 = x_img2
@@ -101,11 +101,11 @@ class DecoderLayer(nn.Module):
         x_img3 = self.dropout6(x_img3)
         x_img3 = x_img3 + q6
         x_img3 = self.LayerNorm6(x_img3)
-        """
+        
 
         # final attention layer
-        q7 = x_text2
-        kv7 = x_img2
+        q7 = x_text3
+        kv7 = x_img3
 
         x_final = self.attention3(x=q7, source_kv=kv7)
         x_final = self.dropout7(x_final)
