@@ -55,62 +55,29 @@ class DecoderLayer(nn.Module):
         q1 = x
         kv1 = clip_his
 
-        x_text1 = self.attention(x=q1, source_kv = kv1)
-        x_text1 = self.dropout(x_text1)
-        x_text1 = x_text1 + q1
-        x_text1= self.LayerNorm(x_text1)
-        
-        q2 = clip_his
-        kv2 = x
+        x_1 = self.attention(x=q1, source_kv = kv1)
+        x_1 = self.dropout(x_1)
+        x_1 = x_1 + q1
+        x_1= self.LayerNorm(x_1)
 
-        x_img1 = self.attention2(x=q2, source_kv=kv2)
-        x_img1 = self.dropout2(x_img1)
-        x_img1 = x_img1 + q2
-        x_img1 = self.LayerNorm2(x_img1)
+        q2 = x_1
+        kv2 = clip_his
 
-        # secoind layer
-        q3 = x_text1
-        kv3 = x_img1
+        x_2 = self.attention2(x=q2, source_kv=kv2)
+        x_2 = self.dropout2(x_2)
+        x_2 = x_2 + q2
+        x_2 = self.LayerNorm2(x_2)
 
-        x_text2 = self.attention3(x=q3, source_kv=kv3)
-        x_text2 = self.dropout3(x_text2)
-        x_text2 = x_text2 + q3
-        x_text2 = self.LayerNorm3(x_text2)
+        q3 = x_2
+        kv3 = clip_his
 
-        q4 = x_img1
-        kv4 = x_text1
+        x_3 = self.attention3(x=q3, source_kv=kv3)
+        x_3 = self.dropout3(x_3)
+        x_3 = x_3 + q3
+        x_3 = self.LayerNorm3(x_3)
 
-        x_img2 = self.attention4(x=q4, source_kv=kv4)
-        x_img2 = self.dropout4(x_img2)
-        x_img2 = x_img2 + q4
-        x_img2 = self.LayerNorm4(x_img2)
-        
-        # tird layer 
-        q5 = x_text2
-        kv5 = x_img2
-
-        x_text3 = self.attention3(x=q5, source_kv=kv5)
-        x_text3 = self.dropout5(x_text3)
-        x_text3 = x_text3 + q5
-        x_text3 = self.LayerNorm5(x_text3)
-
-        q6 = x_img2
-        kv6 = x_text2
-
-        x_img3 = self.attention3(x=q6, source_kv=kv6)
-        x_img3 = self.dropout6(x_img3)
-        x_img3 = x_img3 + q6
-        x_img3 = self.LayerNorm6(x_img3)
-        
-
-        # final attention layer
-        q7 = x_text3
-        kv7 = x_img3
-
-        x_final = self.attention3(x=q7, source_kv=kv7)
-        x_final = self.dropout7(x_final)
-        x_final = x_final + q7
-        x_final = self.LayerNorm7(x_final)
+        x_final = x_1 + x_2 + x_3
+        x_final = self.LayerNorm6(x_final)
 
         if make_knn_dstore: 
             knn_feat = x_final.clone().detach().cpu()
