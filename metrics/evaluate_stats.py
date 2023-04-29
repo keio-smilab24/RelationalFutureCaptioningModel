@@ -52,8 +52,13 @@ def evaluate_stats_files(
     Get vocab size, average length, etc
     """
     # load data
+    with open(reference_file, "r") as sub_f:
+        ref_data = {}
+        for line in sub_f:
+            data = json.loads(line)
+            ref_data[data["setNum"] + "_" + data["scene"]] = data["parse_sentence"]
     sub_data = json.load(open(submission_file, "r"))
-    ref_data = json.load(open(reference_file, "r"))
+    # ref_data = json.load(open(reference_file, "r"))
     sub_data = sub_data["results"] if "results" in sub_data else sub_data
     ref_data = ref_data["results"] if "results" in ref_data else ref_data
     if datatype == "bila":

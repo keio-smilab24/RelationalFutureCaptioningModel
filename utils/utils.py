@@ -319,9 +319,9 @@ def get_reference_files(
             if make_knn_dstore:
                 return {"train": ["data/BilaS/caption_train.json"]}
             elif test:
-                return {"test": ["data/BilaS/caption_test.json"]}
+                return {"test": ["data/BilaS/bilas_test_mecab.jsonl"]}
             else:
-                return {"val": ["data/BilaS/caption_valid.json"]}
+                return {"val": ["data/BilaS/bilas_valid_mecab.jsonl"]}
     raise ValueError(f"Dataset unknown {dset_name}")
 
 

@@ -32,7 +32,7 @@ from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
 from metrics.JaSPICE.jaspice.api import JaSPICE
 
 
-def parse_sent(sent, datatype: str='bila'):
+def parse_sent(sent, datatype: str='bila', extention: str=None):
     if datatype == 'bila':
         res = re.sub("[^a-zA-Z]", " ", sent)
         res = res.strip().lower().split()
@@ -46,9 +46,9 @@ def parse_para(para, datatype: str='bila'):
     if datatype == "bila":
         para = para.replace("..", ".")
         para = para.replace(".", " endofsent")
-        return parse_sent(para, datatype=datatype)
+        return parse_sent(para, datatype=datatype, extention="jsonl")
     elif datatype == 'bilas':
-        return parse_sent(para, datatype=datatype)
+        return parse_sent(para, datatype=datatype, extention="jsonl")
 
 class CaptionEvaluator:
     """
@@ -102,14 +102,18 @@ class CaptionEvaluator:
         self.n_ref_vids = set()
         self.scores = {}
 
-    def ensure_caption_key(self, data, datatype: str='bila'):
+    def ensure_caption_key(self, data, datatype: str='bila', extention: str=None):
         if len(data) == 0:
             return data
         if datatype == 'bila':
-            if not list(data.keys())[0].startswith("v_"):
+            if extention == "jsonl":
+                data = {"v_" + data["scene"]: data["parse_sentence"]}
+            elif not list(data.keys())[0].startswith("v_"):
                 data = {"v_" + k: data[k] for k in data}
         elif datatype == 'bilas':
-            if not list(data.keys())[0].startswith("v_"):
+            if extention == "jsonl":
+                data = {"v_" + data["scene"]: data["parse_sentence"]}
+            elif not list(data.keys())[0].startswith("v_"):
                 data = {"v_" + k: data[k] for k in data}
         return data
 
@@ -134,11 +138,21 @@ class CaptionEvaluator:
 
     def import_ground_truths(self, filenames):
         gts = []
+        gt = {}
         self.n_ref_vids = set()
         for filename in filenames:
-            gt = json.load(open(filename))
-            self.n_ref_vids.update(list(gt.keys()))
-            gts.append(self.ensure_caption_key(gt))
+            with open(filename, mode="r") as gt_file:
+                for line in gt_file:
+                    gt_data = json.loads(line)
+                    self.n_ref_vids.update(gt_data["scene"])
+                    if "v_" + gt_data["scene"] in gt:
+                        gt["v_" + gt_data["scene"]].append(gt_data["parse_sentence"])
+                    else:
+                        gt["v_" + gt_data["scene"]] = [gt_data["parse_sentence"]]
+            gts.append(gt)
+            # gt = json.load(open(filename))
+            # self.n_ref_vids.update(list(gt.keys()))
+            # gts.append(self.ensure_caption_key(gt))
         if self.verbose:
             print(
                 (
@@ -173,14 +187,35 @@ class CaptionEvaluator:
             for k in gt_vid_ids:
                 if k not in gt:
                     continue
-                gts[vid2idx[k]].append(" ".join(parse_sent(gt[k], datatype=datatype)))
+                sentences = gt[k]
+                # sentencesがリストでなければリストに変換
+                if not isinstance(sentences, list):
+                    sentences = [sentences]
+                for sent in sentences:
+                    parsed_sent = parse_sent(sent, datatype=datatype, extention="jsonl")
+                    # parsed_sentがリストであれば、リスト内の要素をスペースで結合して文字列に変換
+                    if isinstance(parsed_sent, list):
+                        parsed_sent = " ".join(parsed_sent)
+                    gts[vid2idx[k]].append(parsed_sent)
 
-        res = {
-            vid2idx[k]: [" ".join(parse_sent(self.prediction[k], datatype=datatype))]
-            if k in self.prediction and len(self.prediction[k]) > 0
-            else [""]
-            for k in gt_vid_ids
-        }
+        res = {}
+        for k in gt_vid_ids:
+            if k in self.prediction and len(self.prediction[k]) > 0:
+                sentences = self.prediction[k]
+                # sentencesがリストでなければリストに変換
+                if not isinstance(sentences, list):
+                    sentences = [sentences]
+                res[vid2idx[k]] = [" ".join(parse_sent(sent, datatype=datatype, extention="jsonl")) for sent in sentences]
+            else:
+                res[vid2idx[k]] = [""]
+
+
+        # res = {
+        #     vid2idx[k]: [" ".join(parse_sent(self.prediction[k], datatype=datatype, extention="jsonl"))]
+        #     if k in self.prediction and len(self.prediction[k]) > 0
+        #     else [""]
+        #     for k in gt_vid_ids
+        # }
         para_res = {
             vid2idx[k]: [" ".join(parse_para(self.prediction[k], datatype=datatype))]
             if k in self.prediction and len(self.prediction[k]) > 0
