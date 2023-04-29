@@ -16,7 +16,7 @@ data/
 /BDD-X-Dataset/
 /out/
 /tmp_img*/
-temp_data/
+data_*/
 
 # ----- BilaS ------
 .vscode/
