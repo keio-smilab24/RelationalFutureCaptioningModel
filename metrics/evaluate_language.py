@@ -130,7 +130,7 @@ class CaptionEvaluator:
         for idx in list(submission.keys()):
             para_submission[idx] = ""
             for info in submission[idx]:
-                para_submission[idx] += info["sentence"] + ". "
+                para_submission[idx] = info["sentence"] + ". "
         for para in list(para_submission.values()):
             assert type(para) == str or type(para) == str
         # Ensure that every video is limited to the correct maximum number of proposals.
