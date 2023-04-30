@@ -107,12 +107,12 @@ class CaptionEvaluator:
             return data
         if datatype == 'bila':
             if extention == "jsonl":
-                data = {"v_" + data["scene"]: data["parse_sentence"]}
+                data = {"v_" + data["setNum"] + "_" + data["scene"]: data["parse_sentence"]}
             elif not list(data.keys())[0].startswith("v_"):
                 data = {"v_" + k: data[k] for k in data}
         elif datatype == 'bilas':
             if extention == "jsonl":
-                data = {"v_" + data["scene"]: data["parse_sentence"]}
+                data = {"v_" + data["setNum"] + "_" + data["scene"]: data["parse_sentence"]}
             elif not list(data.keys())[0].startswith("v_"):
                 data = {"v_" + k: data[k] for k in data}
         return data
@@ -145,10 +145,10 @@ class CaptionEvaluator:
                 for line in gt_file:
                     gt_data = json.loads(line)
                     self.n_ref_vids.update(gt_data["scene"])
-                    if "v_" + gt_data["scene"] in gt:
-                        gt["v_" + gt_data["scene"]].append(gt_data["parse_sentence"])
+                    if "v_" + gt_data["setNum"] + "_" + gt_data["scene"] in gt:
+                        gt["v_" + gt_data["setNum"] + "_" + gt_data["scene"]].append(gt_data["parse_sentence"])
                     else:
-                        gt["v_" + gt_data["scene"]] = [gt_data["parse_sentence"]]
+                        gt["v_" + gt_data["setNum"] + "_" + gt_data["scene"]] = [gt_data["parse_sentence"]]
             gts.append(gt)
             # gt = json.load(open(filename))
             # self.n_ref_vids.update(list(gt.keys()))
