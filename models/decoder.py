@@ -11,33 +11,10 @@ class DecoderLayer(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        self.LayerNorm2 = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        self.LayerNorm3 = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        self.LayerNorm4 = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        self.LayerNorm5 = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        self.LayerNorm6 = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        self.LayerNorm7 = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
 
         # attention
         self.attention = MultiHeadAttention(cfg)
-        self.attention2 = MultiHeadAttention(cfg)
-        self.attention3 = MultiHeadAttention(cfg)
-        self.attention4 = MultiHeadAttention(cfg)
-        self.attention5 = MultiHeadAttention(cfg)
-        self.attention6 = MultiHeadAttention(cfg)
-        self.attention7 = MultiHeadAttention(cfg)
-
         self.rand = torch.randn(1, requires_grad=True).cuda()
-        self.rand2 = torch.randn(1, requires_grad=True).cuda()
-        self.rand3 = torch.randn(1, requires_grad=True).cuda()
-        self.dropout = nn.Dropout(cfg.hidden_dropout_prob)
-        self.dropout2 = nn.Dropout(cfg.hidden_dropout_prob)
-        self.dropout3 = nn.Dropout(cfg.hidden_dropout_prob)
-        self.dropout4 = nn.Dropout(cfg.hidden_dropout_prob)
-        self.dropout5 = nn.Dropout(cfg.hidden_dropout_prob)
-        self.dropout6 = nn.Dropout(cfg.hidden_dropout_prob)
-        self.dropout7 = nn.Dropout(cfg.hidden_dropout_prob)
-
 
         # ffn
         self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
@@ -51,41 +28,18 @@ class DecoderLayer(nn.Module):
         make_knn_dstore: bool=False
         ):
         # attention layer
-        # first layer
-        q1 = x
-        kv1 = clip_his
+        identity_x = x.clone().cuda()
+        att = self.attention(x=x, source_kv=clip_his)
+        x = self.rand*identity_x + (1 - self.rand)*att
+        x = self.LayerNorm(x)
 
-        x_1 = self.attention(x=q1, source_kv = kv1)
-        x_1 = self.dropout(x_1)
-        x_1 = x_1 + q1
-        x_1= self.LayerNorm(x_1)
-
-        q2 = x_1
-        kv2 = clip_his
-
-        x_2 = self.attention2(x=q2, source_kv=kv2)
-        x_2 = self.dropout2(x_2)
-        x_2 = x_2 + q2
-        x_2 = self.LayerNorm2(x_2)
-
-        q3 = x_2
-        kv3 = clip_his
-
-        x_3 = self.attention3(x=q3, source_kv=kv3)
-        x_3 = self.dropout3(x_3)
-        x_3 = x_3 + q3
-        x_3 = self.LayerNorm3(x_3)
-
-        x_final = x_1 + x_2 + x_3
-        x_final = self.LayerNorm6(x_final)
-
-        if make_knn_dstore: 
-            knn_feat = x_final.clone().detach().cpu()
+        if make_knn_dstore: #最後の文字なら
+            knn_feat = x.clone().detach().cpu()
 
         # ffn
-        identity_x = x_final.clone().cuda()
-        x_final = self.ffn(x_final)
-        output = self.rand_z*identity_x + (1 - self.rand_z)*x_final
+        identity_x = x.clone().cuda()
+        x = self.ffn(x)
+        output = self.rand_z*identity_x + (1 - self.rand_z)*x
         output = self.LayerNorm(output)
 
         if make_knn_dstore:
