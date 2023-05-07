@@ -273,21 +273,25 @@ class CrossAttention(nn.Module):
             camera_feats = img_feats[:,0:2,:].contiguous() # (B, 2, H, W, C)
             target_feats = img_feats[:,2:4,:].contiguous() # (B, 2, H, W, C)
         else:
-            camera_feats = torch.cat((img_feats[:,0:2,:], img_feats[:,4:6,:]), dim=1).contiguous() #(B,4,H,W,C)
+            camera_feats = torch.cat((img_feats[:,0:2,:], img_feats[:,4:6,:]), dim=1).contiguous() #(B,4,H,W,C) [16,4,224,224,3]
             target_feats = img_feats[:,2:4,:].contiguous() #(B,4,H,W,C)
 
-        camera_feats = self.camera_embedder(camera_feats) # (B, 2or4, D)
-        target_feats = self.target_embedder(target_feats) # (B, 2or4, D)
+        camera_feats = self.camera_embedder(camera_feats) # (B, 2or4, D) # [16, 4, 768]
+        target_feats = self.target_embedder(target_feats) # (B, 2or4, D)  [16, 2, 768]
 
         # cat target and objcet(of detection)
-        camera_feats = torch.cat((camera_feats, detection_feats), dim=1)
+        camera_feats = torch.cat((camera_feats, detection_feats), dim=1) # [16, 34, 768]
         # target_feats = torch.cat((target_feats, detection_feats), dim=1)
 
-        camera_feats = self.camera_encoder(hidden_states=camera_feats, source_kv=target_feats) #(B,4(2),D)
-        target_feats = self.target_encoder(hidden_states=target_feats, source_kv=camera_feats) #(B,4(2),D)
+        
+        # camera_feats = self.camera_encoder(hidden_states=camera_feats, source_kv=target_feats) #(B,4(2),D) [16, 34, 768]
+        # target_feats = self.target_encoder(hidden_states=target_feats, source_kv=camera_feats) #(B,4(2),D) [16, 2, 768]
 
-        img_feats = torch.cat((camera_feats[:,:4,:], target_feats), dim=1)
+        img_feats = torch.cat((camera_feats[:,:4,:], target_feats), dim=1) 
+        # repeated_target_feats = target_feats.repeat(1, 3, 1)  # [16, 6, 768]
+        # img_feats = repeated_target_feats  # [16, 6, 768]
 
+        """
         identity_img_feats = img_feats
         img_feats3 = self.selfatt(img_feats)
         img_feats3 = img_feats3 + identity_img_feats
@@ -297,12 +301,12 @@ class CrossAttention(nn.Module):
         img_feats2 = self.selfatt2(img_feats3)
         img_feats2 = img_feats2 + identity_img_feats2
         img_feats2 = self.LayerNorm2(img_feats2)
-
+        """
         # concat
         # img_feats = torch.cat((camera_feats[:,:4,:], target_feats), dim=1) #(B, 6(4), D)
         # img_feats = torch.cat((camera_feats, target_feats[:, :2, :]), dim=1) #(B, 6(4), D)
 
-        return img_feats2
+        return img_feats
 
 def create_model(
     cfg: Config,
