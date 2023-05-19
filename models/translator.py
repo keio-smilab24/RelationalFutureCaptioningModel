@@ -101,6 +101,7 @@ class Translator(object):
         token_type_ids_list,
         bboxes_list,
         bbox_feats_list,
+        labels_list,
         make_knn_dstore: bool=False,
         do_knn: bool=False,
     ):
@@ -120,6 +121,7 @@ class Translator(object):
             token_type_ids,
             bboxes,
             bbox_feats,
+            labels,
             max_v_len,
             max_t_len,
             start_idx=BilaDataset.BOS,
@@ -155,6 +157,7 @@ class Translator(object):
                         token_type_ids,
                         bboxes,
                         bbox_feats,
+                        labels,
                         make_knn_dstore=(make_knn_dstore or do_knn),
                     )
                 else:
@@ -166,6 +169,7 @@ class Translator(object):
                         token_type_ids,
                         bboxes,
                         bbox_feats,
+                        labels,
                     )
                 
                 # suppress unk token; (N, L, vocab_size)
@@ -247,6 +251,7 @@ class Translator(object):
                     token_type_ids_list[idx],
                     bboxes_list[idx],
                     bbox_feats_list[idx],
+                    labels_list[idx],
                     self.cfg.max_v_len,
                     self.cfg.max_t_len,
                     make_knn_dstore=make_knn_dstore,
@@ -322,6 +327,7 @@ class Translator(object):
             token_type_ids_list,
             bboxes_list,
             bbox_feats_list,
+            labels_list
         ) = model_inputs
         
         return self.translate_batch_greedy(
@@ -333,6 +339,7 @@ class Translator(object):
             token_type_ids_list,
             bboxes_list,
             bbox_feats_list,
+            labels_list,
             make_knn_dstore=make_knn_dstore,
             do_knn=do_knn,
         )

@@ -421,6 +421,7 @@ class Trainer:
                     gt_rec = [e["gt_rec"] for e in batched_data]
                     bboxes_list = [e["bboxes"] for e in batched_data]
                     bbox_feats_list = [e["bbox_feats"] for e in batched_data]
+                    labels = [e["labels"] for e in batched_data]
 
                     if self.cfg.debug:
                         cur_data = batched_data[step]
@@ -446,6 +447,7 @@ class Trainer:
                         gt_rec,
                         bboxes_list,
                         bbox_feats_list,
+                        labels
                     )
 
                     self.train_steps += 1
@@ -651,6 +653,7 @@ class Trainer:
                 gt_rec = [e["gt_rec"] for e in batched_data]
                 bboxes_list = [e["bboxes"] for e in batched_data]
                 bbox_feats_list = [e["bbox_feats"] for e in batched_data]
+                labels = [e["labels"] for e in batched_data]
 
                 loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                     input_ids_list,
@@ -662,6 +665,7 @@ class Trainer:
                     gt_rec,
                     bboxes_list,
                     bbox_feats_list,
+                    labels,
                 )
                 batch_loss += loss
                 batch_snt_loss += snt_loss
@@ -681,6 +685,7 @@ class Trainer:
                     [e["token_type_ids"] for e in batched_data],
                     [e["bboxes"] for e in batched_data],
                     [e["bbox_feats"] for e in batched_data],
+                    [e["labels"] for e in batched_data]
                 ]
                 dec_seq_list = self.translator.translate_batch(
                     self.model,
@@ -973,6 +978,7 @@ class Trainer:
                 gt_rec = [e["gt_rec"] for e in batched_data]
                 bboxes_list = [e["bboxes"] for e in batched_data]
                 bbox_feats_list = [e["bbox_feats"] for e in batched_data]
+                labels = [e["labels"] for e in batched_data]
 
                 loss, pred_scores_list, snt_loss, rec_loss, clip_loss = self.model(
                     input_ids_list,
@@ -984,6 +990,7 @@ class Trainer:
                     gt_rec,
                     bboxes_list,
                     bbox_feats_list,
+                    labels,
                 )
                 batch_loss += loss
                 batch_snt_loss += snt_loss
@@ -1002,6 +1009,7 @@ class Trainer:
                     [e["token_type_ids"] for e in batched_data],
                     [e["bboxes"] for e in batched_data],
                     [e["bbox_feats"] for e in batched_data],
+                    [e["labels"] for e in batched_data]
                 ]
                 dec_seq_list = self.translator.translate_batch(
                     self.model,

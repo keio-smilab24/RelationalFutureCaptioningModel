@@ -41,6 +41,7 @@ def make_dict(train_caption_file, word2idx_filepath, datatype: str="bila"):
 
     elif datatype == "bilas":
         train_caption_file = "data/BilaS/bilas_train_mecab.jsonl"
+        labels_file = "data/BilaS/labels.txt"
         word2idx_filepath = "data/BilaS/ponnet_word2idx.json"
         max_words = 0
         sentence_list = []
@@ -54,6 +55,11 @@ def make_dict(train_caption_file, word2idx_filepath, datatype: str="bila"):
             word_list = nltk.tokenize.word_tokenize(sent)
             max_words = max(max_words, len(word_list))
             words.extend(word_list)
+        with open(labels_file) as f:
+            lines = f.readlines()
+        for line in lines:
+            words.append(line.replace("\n",""))
+
 
     # default dict
     word2idx_dict =\
@@ -199,7 +205,7 @@ class BilaDataset(data.Dataset):
 
     def __len__(self):
         return len(self.data)
-        # return int(len(self.data)/20)
+        # return int(len(self.data)/40)
 
     def __getitem__(self, index):
         items, meta = self.convert_example_to_features(self.data[index])
@@ -215,9 +221,11 @@ class BilaDataset(data.Dataset):
 
             bbox_file_path = os.path.join(data_dir, "csv_bbox", f'{scene:04}_rgb_bbox.csv')
             bbox_feat_path = os.path.join(data_dir, "csv_feature", f'{scene:04}_rgb_features.csv')
+            label_path = os.path.join(data_dir, "csv_label", f'{scene:04}_rgb_label.csv')
 
             bbox_list = self._load_from_csv(bbox_file_path)
             bbox_feats_list = self._load_from_csv(bbox_feat_path)
+            label_list = self._load_label_from_csv(label_path)
 
             # 検出したbboxの数を計算
             num_bb = len(bbox_feats_list)
@@ -227,11 +235,28 @@ class BilaDataset(data.Dataset):
                 # frcnnの次元: 1024
                 bbox_feats_list = [[0]*1024 for _ in range(1)]
                 bbox_list = [[0]*6 for _ in range(1)]
+                label_list = [""]
 
             bboxes = np.asarray(bbox_list)
             bbox_feats = np.asarray(bbox_feats_list)
 
-        return bboxes, bbox_feats
+        return bboxes, bbox_feats, label_list
+
+    def _load_label_from_csv(self, file_path: str):
+        """
+        Summary:
+            csvファイルからデータを読み込む
+        Args:
+            file_path: ファイルパス
+        Return:
+            データが格納されたリスト
+        """
+        outputs = []
+        with open(file_path) as f:
+            csv_reader = csv.reader(f)
+            for row_str in csv_reader:
+                outputs.append(row_str[0])
+        return outputs
 
     def _load_from_csv(self, file_path: str):
         """
@@ -353,11 +378,10 @@ class BilaDataset(data.Dataset):
         raw_name = example["clip_id"] # clip_id : VideoID/SceneID
         img_list, rec_img = self._load_ponnet_img_feature(raw_name)
 
-        bboxes, bbox_feats = self._load_bbox_feats(raw_name)
+        bboxes, bbox_feats, labels = self._load_bbox_feats(raw_name)
 
         single_features = []
         single_meta = []
-
         # imageとtextを合わせた特徴やmask等の作成
         data, meta = self.clip_sentence_to_feature(
             example["clip_id"],
@@ -366,6 +390,7 @@ class BilaDataset(data.Dataset):
             img_list,
             bboxes,
             bbox_feats,
+            labels,
         )
 
         single_features.append(data)
@@ -381,6 +406,7 @@ class BilaDataset(data.Dataset):
         img_list,
         bboxes,
         bbox_feats,
+        labels,
     ):
         """
         make features for a single clip-sentence pair.
@@ -398,6 +424,9 @@ class BilaDataset(data.Dataset):
 
         # text用のtokenとmaskを作成
         text_tokens, text_mask = self._tokenize_pad_sentence(sentence)
+        label_tokens = []
+        for label in labels:
+            label_tokens.extend(nltk.tokenize.word_tokenize(label))
 
         # img_tokenとtext_tokenを連結
         input_tokens = video_tokens + text_tokens
@@ -405,6 +434,9 @@ class BilaDataset(data.Dataset):
         # token(単語含む) -> id列
         input_ids = [
             self.word2idx.get(t, self.word2idx[self.UNK_TOKEN]) for t in input_tokens
+        ]
+        label_ids = [
+            self.word2idx.get(t, self.word2idx[self.UNK_TOKEN]) for t in label_tokens
         ]
 
         # text部分のみID, その他は-1のリストを作成
@@ -419,6 +451,9 @@ class BilaDataset(data.Dataset):
         input_mask = video_mask + text_mask
         token_type_ids = [0] * self.max_v_len + [1] * self.max_t_len
 
+        labels = np.array(label_ids).astype(np.int64)
+        labels = labels[..., np.newaxis]
+
         data = dict(
             name=name,
             input_tokens=input_tokens,
@@ -431,6 +466,7 @@ class BilaDataset(data.Dataset):
             gt_rec = gt_rec,
             bboxes=bboxes.astype(np.float32),
             bbox_feats=bbox_feats.astype(np.float32),
+            labels = labels
         )
         meta = dict(name=name, sentence=sentence)
 
@@ -464,11 +500,11 @@ class BilaDataset(data.Dataset):
         img_feats = np.zeros((self.max_v_len-2, *img_list[0].shape))
         txt_feats = np.zeros((self.max_t_len, self.clip_dim))
 
-        
+
         for idx in range(len(img_list)):
             img_feats[idx] = img_list[idx]
-        
-            
+
+
         return img_feats, txt_feats, video_tokens, mask
 
     def _tokenize_pad_sentence(self, sentence):
@@ -582,14 +618,15 @@ def pad_tensors(key, inputs, lens=None, pad=0):
         output.data.fill_(pad)
     for i, (t, l) in enumerate(zip(inputs, lens)):
         output[i, :l, :] = t.data
-
-    if key == "bbox_feats":
-        return torch.from_numpy(output)
     if key == "bboxes":
         output = torch.from_numpy(output)
         # 面積情報の追加
         output = torch.cat([output, output[:,:,4:5]*output[:,:,5:]], dim=-1)
         return output
+
+    else:
+        return torch.from_numpy(output)
+
 
 
 def prepare_batch_inputs(batch, use_cuda: bool, non_blocking=False):
@@ -616,7 +653,7 @@ def step_collate(padded_batch_step):
         value = padded_batch_step[0][key]
         if isinstance(value, list):
             c_batch[key] = [d[key] for d in padded_batch_step]
-        elif key in ["bboxes", "bbox_feats"]:
+        elif key in ["bboxes", "bbox_feats", "labels"]:
             c_batch[key] = pad_tensors(key, [d[key] for d in padded_batch_step])
         else:
             c_batch[key] = default_collate([d[key] for d in padded_batch_step])

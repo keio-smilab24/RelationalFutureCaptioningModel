@@ -92,6 +92,7 @@ class RecursiveTransformer(nn.Module):
         token_type_ids: torch.Tensor,
         bboxes: torch.Tensor,
         bbox_feats: torch.Tensor,
+        labels: torch.Tensor,
         make_knn_dstore: bool = False,
     ):
         """
@@ -127,7 +128,7 @@ class RecursiveTransformer(nn.Module):
 
         # img_feats, _ = self.RSAEncoder(img_feats)
 
-        embeddings = self.embeddings(input_ids, features, token_type_ids)
+        embeddings, label_embeddings = self.embeddings(input_ids, features, token_type_ids, labels)
 
         encoded_layer_outputs = self.TextEncoder(
             embeddings, input_masks, output_all_encoded_layers=False)
@@ -160,6 +161,7 @@ class RecursiveTransformer(nn.Module):
         gt_rec=None,
         bbox_list=None,
         bbox_feats_list=None,
+        labels=None,
     ):
         """
         Args:
@@ -190,6 +192,7 @@ class RecursiveTransformer(nn.Module):
                     token_type_ids_list[idx],
                     bbox_list[idx],
                     bbox_feats_list[idx],
+                    labels[idx],
                 )
                 gt_reconst.append(gt_rec[idx])
                 pred_reconst.append(pred_tmp)
@@ -206,6 +209,7 @@ class RecursiveTransformer(nn.Module):
                     token_type_ids_list[idx],
                     bbox_list[idx],
                     bbox_feats_list[idx],
+                    labels[idx],
                 )
                 encoded_outputs_list.append(encoded_layer_outputs)
                 prediction_scores_list.append(prediction_scores)
@@ -283,11 +287,11 @@ class CrossAttention(nn.Module):
         camera_feats = torch.cat((camera_feats, detection_feats), dim=1) # [16, 34, 768]
         # target_feats = torch.cat((target_feats, detection_feats), dim=1)
 
-        
-        camera_feats = self.camera_encoder(hidden_states=camera_feats, source_kv=target_feats) #(B,4(2),D) [16, 34, 768]
-        target_feats = self.target_encoder(hidden_states=target_feats, source_kv=camera_feats) #(B,4(2),D) [16, 2, 768]
 
-        img_feats = torch.cat((camera_feats[:,:4,:], target_feats), dim=1) 
+        # camera_feats = self.camera_encoder(hidden_states=camera_feats, source_kv=target_feats) #(B,4(2),D) [16, 34, 768]
+        # target_feats = self.target_encoder(hidden_states=target_feats, source_kv=camera_feats) #(B,4(2),D) [16, 2, 768]
+
+        img_feats = torch.cat((camera_feats[:,:4,:], target_feats), dim=1)
         # repeated_target_feats = target_feats.repeat(1, 3, 1)  # [16, 6, 768]
         # img_feats = repeated_target_feats  # [16, 6, 768]
 
