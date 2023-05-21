@@ -11,7 +11,7 @@ class DecoderLayer(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        
+
         # attention q=text, k,v=image
         self.attention = MultiHeadAttention(cfg)
         self.rand = torch.randn(1, requires_grad=True).cuda()
@@ -23,7 +23,7 @@ class DecoderLayer(nn.Module):
         # cross atteniton q=text, k,v=img
         self.attention3 = MultiHeadAttention(cfg)
         self.rand3 = torch.randn(1, requires_grad=True).cuda()
-        
+
         # ffn
         self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
         self.rand_z = torch.randn(1, requires_grad=True).cuda()
@@ -47,9 +47,9 @@ class DecoderLayer(nn.Module):
         att = self.attention2(x=x, source_kv=clip_his[:,4:,:])
         x_img = self.rand2*identity_x + (1-self.rand2)*att
         x_img = self.LayerNorm(x_img) # ([16, 6, 768])
-        
+
         # x = torch.cat((x_img, x_text[:,x_img.shape[1]:,:]), dim=1)
-        
+
         x = torch.cat(((x_text[:, :x_img.shape[1], :]+x_img)/2 , x_text[:, x_img.shape[1]:, :]), dim=1)
         # x_text[:, :x_img.shape[1], :] += x_img
         # x_text[:, :x_img.shape[1], :] /= 2
@@ -71,7 +71,7 @@ class DecoderLayer(nn.Module):
 
         if make_knn_dstore:
             return output, knn_feat
-        
+
         return output
 
 
@@ -99,7 +99,7 @@ class TransformerDecoder(nn.Module):
             else:
                 hidden_states = layer(hidden_states, attention_mask, clip_his)
             all_layer_outputs.append(hidden_states)
-        
+
         if make_knn_dstore:
             return all_layer_outputs, knn_feats
         else:
@@ -149,7 +149,7 @@ class PredictionHead(nn.Module):
         super().__init__()
         self.transform = PredictionHeadTransform(cfg)
 
-        # The output weights are the same as the input embeddings, 
+        # The output weights are the same as the input embeddings,
         # but there is　an output-only bias for each token.
         if cfg.share_wd_cls_weight:
             assert bert_model_embedding_weights is not None, (
