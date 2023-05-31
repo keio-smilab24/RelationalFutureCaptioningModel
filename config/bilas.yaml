@@ -94,7 +94,8 @@ saving:
 # ------ knn ------
 dstore_keys_path: "checkpoints/dstore_keys.npy"
 dstore_vals_path: "checkpoints/dstore_vals.npy"
-dstore_size: 100000
+# dstore_size: 100000
+dstore_size: 200000
 k_num: 10
 alpha: 0.25
 dstore_id_num: 56100

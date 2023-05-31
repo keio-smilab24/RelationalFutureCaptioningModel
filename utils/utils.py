@@ -229,12 +229,12 @@ class TrainerPathConst:
     DIR_CONFIG = "config"
     DIR_EXPERIMENTS = "results"
     DIR_LOGS = "logs"
-    DIR_MODELS = "models" 
+    DIR_MODELS = "models"
     DIR_METRICS = "metrics"
     DIR_EMBEDDINGS = "embeddings"
     DIR_TB = "tb"
     DIR_CAPTION = "caption"
-    DIR_ANNOTATIONS = "data" 
+    DIR_ANNOTATIONS = "data"
     FILE_PREFIX_TRAINERSTATE = "trainerstate"
     FILE_PREFIX_MODEL = "model"
     FILE_PREFIX_MODELEMA = "modelema"
@@ -317,7 +317,7 @@ def get_reference_files(
                 return {"val": [annotations_dir / "captioning_val_para.json"]}
         if datatype == 'bilas':
             if make_knn_dstore:
-                return {"train": ["data/BilaS/caption_train.json"]}
+                return {"train": ["data/BilaS/bilas_train_mecab.jsonl"]}
             elif test:
                 return {"test": ["data/BilaS/bilas_test_mecab.jsonl"]}
             else:
