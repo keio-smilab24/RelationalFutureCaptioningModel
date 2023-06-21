@@ -285,11 +285,11 @@ class CrossAttention(nn.Module):
 
         # cat target and objcet(of detection)
         camera_feats = torch.cat((camera_feats, detection_feats), dim=1) # [16, 34, 768]
-        # target_feats = torch.cat((target_feats, detection_feats), dim=1)
+        target_feats = torch.cat((target_feats, detection_feats), dim=1)
 
 
         camera_feats = self.camera_encoder(hidden_states=camera_feats, source_kv=target_feats) #(B,4(2),D) [16, 34, 768]
-        target_feats = self.target_encoder(hidden_states=target_feats, source_kv=camera_feats) #(B,4(2),D) [16, 2, 768]
+        # target_feats = self.target_encoder(hidden_states=target_feats, source_kv=camera_feats) #(B,4(2),D) [16, 2, 768]
 
         img_feats = torch.cat((camera_feats[:,:4,:], target_feats), dim=1)
         # repeated_target_feats = target_feats.repeat(1, 3, 1)  # [16, 6, 768]

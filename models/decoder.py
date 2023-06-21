@@ -50,7 +50,7 @@ class DecoderLayer(nn.Module):
 
         # x = torch.cat((x_img, x_text[:,x_img.shape[1]:,:]), dim=1)
 
-        x = torch.cat(((x_text[:, :x_img.shape[1], :]+x_img)/2 , x_text[:, x_img.shape[1]:, :]), dim=1)
+        x = x + torch.cat(((x_text[:, :x_img.shape[1], :]+x_img)/2 , x_text[:, x_img.shape[1]:, :]), dim=1)
         # x_text[:, :x_img.shape[1], :] += x_img
         # x_text[:, :x_img.shape[1], :] /= 2
 

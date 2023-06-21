@@ -327,7 +327,7 @@ class BilaDataset(data.Dataset):
 
             img_list_path = [
                 'image_rgb', 'image_depth', 'target_rgb', 'target_depth',
-                'attention_map_rgb', 'attention_map_depth','sam_depth', 'sam_rgb'
+                'attention_map_rgb', 'attention_map_depth',
             ]
 
             img_list = []
@@ -339,7 +339,6 @@ class BilaDataset(data.Dataset):
                 if img_list_path[idx] == "image_rgb":
                     rec_img = cv2.imread(img_path).astype(np.float32)
                     rec_img = cv2.resize(cv2.cvtColor(rec_img, cv2.COLOR_BGR2RGB), dsize=(16, 16))
-
                 img = cv2.resize(cv2.imread(img_path).astype(np.float32), dsize=(224, 224))
                 if img_list_path[idx] == "attention_map_rgb":
                     img = cv2.addWeighted(img, 0.5, sam_rgb, 0.5, 0, dtype=cv2.CV_32F)
@@ -348,6 +347,10 @@ class BilaDataset(data.Dataset):
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 if img_list_path[idx] == "attention_map_depth":
                     img = cv2.addWeighted(img, 0.5, sam_depth, 0.5, 0, dtype=cv2.CV_32F)
+                if img_list_path == "image_rgb":
+                    img = sam_rgb
+                if img_list_path == "image_depth":
+                    img = sam_depth
                 img = self.normalize_img(img)
                 img = torch.from_numpy(img)
                 img_list.append(img)

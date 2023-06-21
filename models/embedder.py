@@ -147,7 +147,7 @@ class MultiModalEmbedding(nn.Module):
         self.word_embeddings = nn.Embedding(
             cfg.vocab_size, cfg.word_vec_size, padding_idx=0
         )
-        self.max_t_len = cfg.max_t_len
+
         self.word_fc = nn.Sequential(
             nn.LayerNorm(cfg.word_vec_size, eps=cfg.layer_norm_eps),
             nn.Dropout(cfg.hidden_dropout_prob),
@@ -192,16 +192,9 @@ class MultiModalEmbedding(nn.Module):
         """
         words_embeddings = self.word_fc(self.word_embeddings(input_ids))
         label_embeddings = self.word_fc(self.word_embeddings(labels))
-        label_embeddings = label_embeddings.squeeze(2)
-        label_len = label_embeddings.shape[1]
         img_embeddings = self.img_embeddings(img_feats)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-        words_embeddings[:, self.max_t_len - label_len, :] = words_embeddings[:, self.max_t_len, :]
-        words_embeddings[:, self.max_t_len - label_len: self.max_t_len, :] = label_embeddings
-        # print("words_embeddings", words_embeddings.shape)
-        # print("label_embeddings", label_embeddings.shape)
-        # print("img_embeddings", img_embeddings.shape)
-        # print("token_type_embeddings", token_type_embeddings.shape)
+
         # words_embeddings += token_type_embeddings
         embeddings = words_embeddings + img_embeddings + token_type_embeddings
         if self.add_postion_embeddings:
