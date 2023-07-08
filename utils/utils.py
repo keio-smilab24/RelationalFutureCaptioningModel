@@ -317,7 +317,7 @@ def get_reference_files(
                 return {"val": [annotations_dir / "captioning_val_para.json"]}
         if datatype == 'bilas':
             if make_knn_dstore:
-                return {"train": ["data/BilaS/bilas_test_mecab.json"]}
+                return {"train": ["data/BilaS/bilas_train_mecab.jsonl"]}
             elif test:
                 return {"test": ["data/BilaS/bilas_test_mecab.jsonl"]}
             else:
