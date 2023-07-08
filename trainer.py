@@ -1149,7 +1149,7 @@ class Trainer:
 
     def calc_sat(self, seed: int=42):
         file_translation_raw = f"results/SAT/test_caption_{seed}.json"
-        reference_files = ['data/BilaS/caption_test.json']
+        reference_files = ['data/BilaS/bilas_test_mecab.json']
 
         print('------------------------------------------')
         print('Read File ')

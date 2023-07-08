@@ -90,7 +90,7 @@ class Translator(object):
             )
         # knn
         self.dstore_idx: int = 0
-    
+
     def translate_batch_greedy(
         self,
         model: nn.Module,
@@ -141,13 +141,13 @@ class Translator(object):
             """
             bsz = len(input_ids)
             next_symbols = torch.LongTensor([start_idx] * bsz)  # (N, )
-            
+
             for dec_idx in range(max_v_len, max_v_len + max_t_len):
                 input_ids[:, dec_idx] = next_symbols
                 input_masks[:, dec_idx] = 1
                 # since the func is changing data inside
                 copied_prev_ms = copy.deepcopy(prev_ms_)
-                
+
                 if make_knn_dstore or do_knn:
                     _, pred_scores, _, knn_feats = model.forward_step(
                         input_ids,
@@ -171,7 +171,7 @@ class Translator(object):
                         bbox_feats,
                         labels,
                     )
-                
+
                 # suppress unk token; (N, L, vocab_size)
                 pred_scores[:, :, unk_idx] = -1e10
 
@@ -183,23 +183,22 @@ class Translator(object):
                     shape = knn_keys.shape
                     dstore_keys[self.dstore_idx:self.dstore_idx+shape[0]] = knn_keys
                     dstore_vals[self.dstore_idx:self.dstore_idx+shape[0]] = knn_vals
-
                     self.dstore_idx += shape[0]
-                
+
                 if do_knn:
                     d_size = self.cfg.dstore_size
                     keys, vals = self.get_knn_feats(self.cfg.dstore_keys_path, self.cfg.dstore_vals_path, d_size, self.cfg.dstore_id_num)
 
                     DataBase = faiss.IndexFlatL2(self.cfg.clip_dim)
-                    DataBase.add(keys)
+                    DataBase.add(np.ascontiguousarray(keys.cpu().detach().numpy()).astype(np.float32))
 
                     hidden_feats = knn_feats[:, dec_idx, :]
 
-                    D, I = DataBase.search(hidden_feats, self.cfg.k_num) # (16, num_k)
+                    D, I = DataBase.search(np.ascontiguousarray(hidden_feats).astype(np.float32), self.cfg.k_num) # (16, num_k)
                     batch_size = knn_feats.shape[0]
-                    
+
                     knn_preds = np.stack([vals[I[i]] for i in range(batch_size)]) # (B,num_k,291)
-                    
+
                     knn_origin = False
                     alpha = self.cfg.alpha
                     if knn_origin:
@@ -211,17 +210,17 @@ class Translator(object):
                         knn_preds = self.make_knn_preds(knn_preds, torch.from_numpy(D))
                         pure_scores = torch.nn.functional.softmax(pred_scores[:, dec_idx], dim=1)
                         pred_scores = (1-alpha)*pure_scores + alpha*knn_preds.to('cuda')
-                        if torch.argmax(pure_scores[0]) != torch.argmax(knn_preds[0]):
-                            print("-----------------------------")
-                            print("Dif pred argmax !!")
-                            print("-----------------------------")
+                        # if torch.argmax(pure_scores[0]) != torch.argmax(knn_preds[0]):
+                            # print("-----------------------------")
+                            # print("Dif pred argmax !!")
+                            # print("-----------------------------")
                         # pred_scores = (1-alpha)*pred_scores[:,dec_idx] + alpha*knn_preds.to('cuda')
-                
+
                 if do_knn:
                     next_words = pred_scores.max(1)[1]
                 else:
                     next_words = pred_scores[:, dec_idx].max(1)[1] # (B,)
-                
+
                 next_symbols = next_words
 
             # compute memory, mimic the way memory is generated at training time
@@ -277,12 +276,12 @@ class Translator(object):
         # distance *= 100
         distance = torch.nn.functional.softmax(torch.exp(-(distance / self.cfg.knn_temperature)), dim=1)
 
-        # (3) knnの予測値を計算する 
+        # (3) knnの予測値を計算する
         preds = torch.zeros((B, vocab_size))
         for b in range(B):
             for k in range(K):
                 preds[b][pred_idx[b][k]] += distance[b][k]
-        
+
         return preds
 
     def get_knn_feats(
@@ -329,7 +328,7 @@ class Translator(object):
             bbox_feats_list,
             labels_list
         ) = model_inputs
-        
+
         return self.translate_batch_greedy(
             model,
             input_ids_list,
