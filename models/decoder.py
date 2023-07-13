@@ -38,19 +38,19 @@ class DecoderLayer(nn.Module):
 
         # attention layer q=text, k,v=image
         identity_x = x.clone().cuda()
-        att = self.attention(x=x, source_kv=clip_his)
+        att = self.attention(x=x, source_kv=clip_his[:, :4, :])
         x_text = self.rand*identity_x + (1 - self.rand)*att
         x_text = self.LayerNorm(x_text) # ([16, 63, 768])
 
         # attention q=image, k,v=text
-        identity_clip = clip_his.clone().cuda()
-        att = self.attention2(x=clip_his, source_kv=x)
-        x_img = self.rand2*identity_clip + (1-self.rand2)*att
+        identity_x = x.clone().cuda()
+        att = self.attention2(x=x, source_kv=clip_his[:, 4:, :])
+        x_img = self.rand2*identity_x + (1-self.rand2)*att
         x_img = self.LayerNorm(x_img) # ([16, 6, 768])
 
         # x = torch.cat((x_img, x_text[:,x_img.shape[1]:,:]), dim=1)
 
-        # for ablation study
+        # # for ablation studsy
         # identity_x = x.clone().cuda()
         # att = att = self.attention(x=x, source_kv=clip_his)
         # x = self.rand*identity_x + (1 - self.rand)*att
