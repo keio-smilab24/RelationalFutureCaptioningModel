@@ -12,13 +12,12 @@ from models.embedder import ResEmbedder, MultiModalEmbedding, ConvNeXtEmbedder, 
 from models.encoder import RSAEncoder, TransformerEncoder, CrossAttentionEncoder
 from models.decoder import TransformerDecoder, PredictionHead
 from models.uniter import UniterImageEmbeddings
-from models.attentions import MultiHeadAttention
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-ACTION_WEIGHT = {111: 131, 94: 628}
+ACTION_WEIGHT = {111: 131, 94: 628} 
 
 # # default infinity (cfg.inf = 0), works with fp32. this can lead to NaN values in some circumstances
 INF = float("inf")
@@ -44,15 +43,15 @@ class RecursiveTransformer(nn.Module):
         self.CrossAttention = CrossAttention(cfg)
         # self.RSAEncoder = RSAEncoder(cfg)
         self.TextEncoder = TransformerEncoder(cfg)
-
+        
         if self.cfg.share_wd_cls_weight:
             decoder_classifier_weight = self.embeddings.word_embeddings.weight
         else:
             decoder_classifier_weight = None
-
+        
         self.transformerdecoder = TransformerDecoder(cfg)
         self.decoder = PredictionHead(cfg, decoder_classifier_weight)
-
+        
         # loss
         if self.cfg.label_smoothing != 0:
             self.loss_func = \
@@ -62,7 +61,7 @@ class RecursiveTransformer(nn.Module):
         self.actionloss_func = nn.CrossEntropyLoss()
         self.rec_loss = nn.MSELoss()
         self.cliploss = CLIPloss(hidden_dim=cfg.hidden_size, max_t_length=cfg.max_t_len)
-
+        
         # init weigh
         self.apply(self.init_bert_weights)
 
@@ -92,7 +91,6 @@ class RecursiveTransformer(nn.Module):
         token_type_ids: torch.Tensor,
         bboxes: torch.Tensor,
         bbox_feats: torch.Tensor,
-        labels: torch.Tensor,
         make_knn_dstore: bool = False,
     ):
         """
@@ -122,27 +120,27 @@ class RecursiveTransformer(nn.Module):
         features = torch.cat(
             (cls_token, img_feats[:,:self.cfg.max_v_len-2,:], bos_token, txt_feats)
             , dim=1)
-
+        
         # 再構成用
         rec_feat = features[:,1,:].clone()
 
         # img_feats, _ = self.RSAEncoder(img_feats)
 
-        embeddings, label_embeddings = self.embeddings(input_ids, features, token_type_ids, labels)
-
+        embeddings = self.embeddings(input_ids, features, token_type_ids)
+        
         encoded_layer_outputs = self.TextEncoder(
             embeddings, input_masks, output_all_encoded_layers=False)
-
+        
         if make_knn_dstore:
             decoded_layer_outputs, knn_feats = self.transformerdecoder(
                 encoded_layer_outputs[-1], input_masks, img_feats, make_knn_dstore=make_knn_dstore)
         else:
             decoded_layer_outputs = self.transformerdecoder(
                 encoded_layer_outputs[-1], input_masks, img_feats)
-
+        
         # (N, L, vocab_size)
         prediction_scores = self.decoder(decoded_layer_outputs[-1])
-
+        
         if make_knn_dstore:
             # .cpu()..の部分一応確認
             knn_feats = np.asarray(knn_feats[-1].cpu().detach().numpy().copy(), dtype=np.float32)
@@ -161,7 +159,6 @@ class RecursiveTransformer(nn.Module):
         gt_rec=None,
         bbox_list=None,
         bbox_feats_list=None,
-        labels=None,
     ):
         """
         Args:
@@ -192,7 +189,6 @@ class RecursiveTransformer(nn.Module):
                     token_type_ids_list[idx],
                     bbox_list[idx],
                     bbox_feats_list[idx],
-                    labels[idx],
                 )
                 gt_reconst.append(gt_rec[idx])
                 pred_reconst.append(pred_tmp)
@@ -209,12 +205,11 @@ class RecursiveTransformer(nn.Module):
                     token_type_ids_list[idx],
                     bbox_list[idx],
                     bbox_feats_list[idx],
-                    labels[idx],
                 )
                 encoded_outputs_list.append(encoded_layer_outputs)
                 prediction_scores_list.append(prediction_scores)
                 action_score.append(prediction_scores[:, 7, :])
-
+        
         # compute loss, get predicted words
         caption_loss = 0.0
         for idx in range(step_size):
@@ -255,17 +250,8 @@ class CrossAttention(nn.Module):
             self.camera_embedder = ConvNeXtEmbedder()
             self.target_embedder = ConvNeXtEmbedder()
 
-        # self attention
-        self.selfatt = MultiHeadAttention(cfg)
-        self.selfatt2 = MultiHeadAttention(cfg)
-        self.selfatt3 = MultiHeadAttention(cfg)
-
         self.camera_encoder = CrossAttentionEncoder(cfg)
         self.target_encoder = CrossAttentionEncoder(cfg)
-
-        self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-        self.LayerNorm2 = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
-
 
     def forward(self, img_feats: torch.Tensor, detection_feats: torch.Tensor):
         """
@@ -277,37 +263,21 @@ class CrossAttention(nn.Module):
             camera_feats = img_feats[:,0:2,:].contiguous() # (B, 2, H, W, C)
             target_feats = img_feats[:,2:4,:].contiguous() # (B, 2, H, W, C)
         else:
-            camera_feats = torch.cat((img_feats[:,0:2,:], img_feats[:,4:6,:]), dim=1).contiguous() #(B,4,H,W,C) [16,4,224,224,3]
+            camera_feats = torch.cat((img_feats[:,0:2,:], img_feats[:,4:6,:]), dim=1).contiguous() #(B,4,H,W,C)
             target_feats = img_feats[:,2:4,:].contiguous() #(B,4,H,W,C)
-
-        camera_feats = self.camera_embedder(camera_feats) # (B, 2or4, D) # [16, 4, 768]
-        target_feats = self.target_embedder(target_feats) # (B, 2or4, D)  [16, 2, 768]
+        
+        camera_feats = self.camera_embedder(camera_feats) # (B, 2or4, D)
+        target_feats = self.target_embedder(target_feats) # (B, 2or4, D)
 
         # cat target and objcet(of detection)
-        camera_feats = torch.cat((camera_feats, detection_feats), dim=1) # [16, 34, 768]
-        target_feats = torch.cat((target_feats, detection_feats), dim=1)
+        camera_feats = torch.cat((camera_feats, detection_feats), dim=1)
+        # target_feats = torch.cat((target_feats, detection_feats), dim=1)
 
+        camera_feats = self.camera_encoder(hidden_states=camera_feats, source_kv=target_feats) #(B,4(2),D)
+        target_feats = self.target_encoder(hidden_states=target_feats, source_kv=camera_feats) #(B,4(2),D)
 
-        camera_feats = self.camera_encoder(hidden_states=camera_feats, source_kv=target_feats) #(B,4(2),D) [16, 34, 768]
-        target_feats = self.target_encoder(hidden_states=target_feats, source_kv=camera_feats) #(B,4(2),D) [16, 2, 768]
-
-        img_feats = torch.cat((camera_feats[:,:4,:], target_feats), dim=1)
-        # repeated_target_feats = target_feats.repeat(1, 3, 1)  # [16, 6, 768]
-        # img_feats = repeated_target_feats  # [16, 6, 768]
-
-        """
-        identity_img_feats = img_feats
-        img_feats3 = self.selfatt(img_feats)
-        img_feats3 = img_feats3 + identity_img_feats
-        img_feats3 = self.LayerNorm(img_feats3)
-
-        identity_img_feats2 = img_feats3
-        img_feats2 = self.selfatt2(img_feats3)
-        img_feats2 = img_feats2 + identity_img_feats2
-        img_feats2 = self.LayerNorm2(img_feats2)
-        """
         # concat
-        # img_feats = torch.cat((camera_feats[:,:4,:], target_feats), dim=1) #(B, 6(4), D)
+        img_feats = torch.cat((camera_feats[:,:4,:], target_feats), dim=1) #(B, 6(4), D)
         # img_feats = torch.cat((camera_feats, target_feats[:, :2, :]), dim=1) #(B, 6(4), D)
 
         return img_feats

@@ -12,17 +12,9 @@ class DecoderLayer(nn.Module):
         self.cfg = cfg
         self.LayerNorm = nn.LayerNorm(cfg.hidden_size, eps=cfg.layer_norm_eps)
 
-        # attention q=text, k,v=image
+        # attention
         self.attention = MultiHeadAttention(cfg)
         self.rand = torch.randn(1, requires_grad=True).cuda()
-
-        # attention q=image, k,v = text
-        self.attention2 = MultiHeadAttention(cfg)
-        self.rand2 = torch.randn(1, requires_grad=True).cuda()
-
-        # cross atteniton q=text, k,v=img
-        self.attention3 = MultiHeadAttention(cfg)
-        self.rand3 = torch.randn(1, requires_grad=True).cuda()
 
         # ffn
         self.ffn = FeedforwardNeuralNetModel(cfg.hidden_size, cfg.hidden_size * 2, cfg.hidden_size)
@@ -35,36 +27,13 @@ class DecoderLayer(nn.Module):
         clip_his: torch.Tensor,
         make_knn_dstore: bool=False
         ):
-
-        # attention layer q=text, k,v=image
+        # attention layer
         identity_x = x.clone().cuda()
-        att = self.attention(x=x, source_kv=clip_his[:, :4, :])
-        x_text = self.rand*identity_x + (1 - self.rand)*att
-        x_text = self.LayerNorm(x_text) # ([16, 63, 768])
+        att = self.attention(x=x, source_kv=clip_his)
+        x = self.rand*identity_x + (1 - self.rand)*att
+        x = self.LayerNorm(x)
 
-        # attention q=image, k,v=text
-        identity_x = x.clone().cuda()
-        att = self.attention2(x=x, source_kv=clip_his[:, 4:, :])
-        x_img = self.rand2*identity_x + (1-self.rand2)*att
-        x_img = self.LayerNorm(x_img) # ([16, 6, 768])
-
-        # x = torch.cat((x_img, x_text[:,x_img.shape[1]:,:]), dim=1)
-
-        # # for ablation studsy
-        # identity_x = x.clone().cuda()
-        # att = att = self.attention(x=x, source_kv=clip_his)
-        # x = self.rand*identity_x + (1 - self.rand)*att
-        # x = self.LayerNorm(x)
-
-        x = x + torch.cat(((x_text[:, :x_img.shape[1], :]+x_img)/2 , x_text[:, x_img.shape[1]:, :]), dim=1)
-
-        # cross attention q=text, k,v=text
-        # identity_x = x_text.clone().cuda()
-        # att = self.attention3(x=x_text, source_kv=x_img)
-        # output = self.rand3*identity_x + (1-self.rand3)*att
-        # output = self.LayerNorm(output)
-
-        if make_knn_dstore:
+        if make_knn_dstore: #最後の文字なら
             knn_feat = x.clone().detach().cpu()
 
         # ffn

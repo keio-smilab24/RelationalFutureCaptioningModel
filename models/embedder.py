@@ -6,7 +6,7 @@ import torchvision.models as models
 import clip
 
 from models.cnn import ConvNeXt
-torch.autograd.set_detect_anomaly(True)
+
 class BaseEmbedder(nn.Module):
     def __init__(self, cfg):
         super(BaseEmbedder, self).__init__()
@@ -119,7 +119,7 @@ class ConvNeXtEmbedder(nn.Module):
         self.convnext = ConvNeXt()
 
     def forward(self, x: torch.Tensor):
-        B,L,H,W,C = x.size()
+        B, L, _, E, S = x.size()
         x = x.view(-1, 3, 224, 224)
         x = self.convnext(x)
         x = x.view(size=(B, L, -1))
@@ -181,7 +181,7 @@ class MultiModalEmbedding(nn.Module):
             padding_idx=self.word_embeddings.padding_idx,
         )
 
-    def forward(self, input_ids, img_feats, token_type_ids, labels):
+    def forward(self, input_ids, img_feats, token_type_ids):
         """
         Args:
             input_ids: (N, L) | CLS, VID...VID, SEP BOS, W..W, EOS, PAD...PAD
@@ -191,18 +191,18 @@ class MultiModalEmbedding(nn.Module):
         Returns:
         """
         words_embeddings = self.word_fc(self.word_embeddings(input_ids))
-        label_embeddings = self.word_fc(self.word_embeddings(labels))
         img_embeddings = self.img_embeddings(img_feats)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         # words_embeddings += token_type_embeddings
         embeddings = words_embeddings + img_embeddings + token_type_embeddings
+
         if self.add_postion_embeddings:
             embeddings = self.position_embeddings(embeddings)
 
         embeddings = self.LayerNorm(embeddings)
         # embeddings = self.dropout(embeddings)
-        return embeddings, label_embeddings
+        return embeddings
 
 
 class PositionEncoding(nn.Module):

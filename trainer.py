@@ -447,7 +447,7 @@ class Trainer:
                         gt_rec,
                         bboxes_list,
                         bbox_feats_list,
-                        labels
+                        # labels
                     )
 
                     self.train_steps += 1
@@ -662,10 +662,10 @@ class Trainer:
                     input_masks_list,
                     token_type_ids_list,
                     input_labels_list,
-                    gt_rec,
-                    bboxes_list,
-                    bbox_feats_list,
-                    labels,
+                    gt_rec=gt_rec,
+                    bbox_list=bboxes_list,
+                    bbox_feats_list=bbox_feats_list,
+                    # labels,
                 )
                 batch_loss += loss
                 batch_snt_loss += snt_loss
@@ -990,7 +990,7 @@ class Trainer:
                     gt_rec,
                     bboxes_list,
                     bbox_feats_list,
-                    labels,
+                    # labels,
                 )
                 batch_loss += loss
                 batch_snt_loss += snt_loss

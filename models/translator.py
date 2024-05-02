@@ -157,7 +157,7 @@ class Translator(object):
                         token_type_ids,
                         bboxes,
                         bbox_feats,
-                        labels,
+                        # labels,
                         make_knn_dstore=(make_knn_dstore or do_knn),
                     )
                 else:
@@ -169,7 +169,7 @@ class Translator(object):
                         token_type_ids,
                         bboxes,
                         bbox_feats,
-                        labels,
+                        # labels,
                     )
 
                 # suppress unk token; (N, L, vocab_size)

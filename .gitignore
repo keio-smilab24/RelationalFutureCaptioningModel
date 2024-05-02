@@ -17,6 +17,7 @@ data/
 /out/
 /tmp_img*/
 data_*/
+result_*/
 
 # ----- BilaS ------
 .vscode/
