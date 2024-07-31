@@ -41,7 +41,7 @@ We expect the directory structure to be the following:
 　   　   ├── sam_rgb
 　   　         ├── *.jpg
 ```
-We constructed the BILA-caption 2.0 dataset based on [BILA-caption dataset](https://arxiv.org/abs/2207.09083) and [PonNet] (https://arxiv.org/pdf/2102.06507).
+We constructed the BILA-caption 2.0 dataset based on [BILA-caption dataset](https://arxiv.org/abs/2207.09083) and [PonNet](https://arxiv.org/pdf/2102.06507).
 
 ## Train
 ```bash
